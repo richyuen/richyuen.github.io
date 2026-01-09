@@ -235,6 +235,7 @@ body {
     font-size: 1.1rem;
     color: var(--text-secondary);
     max-width: 500px;
+    margin: 0 auto;
 }
 
 /* ============================================
