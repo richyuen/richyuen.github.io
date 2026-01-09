@@ -255,80 +255,267 @@
     </div>
 
     <script>
-        const questions = [
-            {
-                question: "What is 3/4 + 1/4?",
-                answers: ["1", "4/8", "1/2", "2/4"],
-                correct: 0
-            },
-            {
-                question: "If a rectangle has a length of 12 cm and width of 8 cm, what is its area?",
-                answers: ["20 cm²", "96 cm²", "40 cm²", "48 cm²"],
-                correct: 1
-            },
-            {
-                question: "What is 0.75 as a fraction in simplest form?",
-                answers: ["75/100", "3/4", "7/5", "15/20"],
-                correct: 1
-            },
-            {
-                question: "A bakery made 144 cookies. If they pack them into boxes of 12, how many boxes do they need?",
-                answers: ["10 boxes", "11 boxes", "12 boxes", "13 boxes"],
-                correct: 2
-            },
-            {
-                question: "What is 8 × 12?",
-                answers: ["84", "96", "104", "88"],
-                correct: 1
-            },
-            {
-                question: "If 2/5 of a class of 30 students are boys, how many boys are in the class?",
-                answers: ["10", "12", "15", "18"],
-                correct: 1
-            },
-            {
-                question: "What is the value of the 7 in the number 47,352?",
-                answers: ["7", "70", "700", "7,000"],
-                correct: 3
-            },
-            {
-                question: "Sarah has $45.50. She buys a book for $12.75. How much does she have left?",
-                answers: ["$32.75", "$33.75", "$32.25", "$33.25"],
-                correct: 0
-            },
-            {
-                question: "What is the perimeter of a square with sides of 9 inches?",
-                answers: ["18 inches", "27 inches", "36 inches", "81 inches"],
-                correct: 2
-            },
-            {
-                question: "Which of these is equivalent to 2.6?",
-                answers: ["2 3/5", "2 6/10", "26/10", "All of the above"],
-                correct: 3
-            }
-        ];
-
         let currentQuestion = 0;
         let score = 0;
         let streak = 0;
         let answered = false;
+        let currentProblem = null;
+        const totalQuestions = 10;
+
+        // Utility function to get random integer between min and max (inclusive)
+        function randInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        // Utility function to shuffle an array
+        function shuffle(array) {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        }
+
+        // GCD function for simplifying fractions
+        function gcd(a, b) {
+            return b === 0 ? a : gcd(b, a % b);
+        }
+
+        // Problem generators
+        function generateAddition() {
+            const a = randInt(10, 99);
+            const b = randInt(10, 99);
+            const answer = a + b;
+
+            return {
+                question: `What is ${a} + ${b}?`,
+                correctAnswer: answer.toString(),
+                wrongAnswers: [
+                    (answer + randInt(1, 10)).toString(),
+                    (answer - randInt(1, 10)).toString(),
+                    (a + b + randInt(11, 20)).toString()
+                ]
+            };
+        }
+
+        function generateSubtraction() {
+            const a = randInt(50, 200);
+            const b = randInt(10, a - 10);
+            const answer = a - b;
+
+            return {
+                question: `What is ${a} - ${b}?`,
+                correctAnswer: answer.toString(),
+                wrongAnswers: [
+                    (answer + randInt(1, 15)).toString(),
+                    (answer - randInt(1, 15)).toString(),
+                    (a + b).toString()
+                ]
+            };
+        }
+
+        function generateMultiplication() {
+            const a = randInt(6, 15);
+            const b = randInt(6, 15);
+            const answer = a * b;
+
+            return {
+                question: `What is ${a} × ${b}?`,
+                correctAnswer: answer.toString(),
+                wrongAnswers: [
+                    (answer + a).toString(),
+                    (answer - b).toString(),
+                    (answer + randInt(5, 20)).toString()
+                ]
+            };
+        }
+
+        function generateDivision() {
+            const divisor = randInt(6, 12);
+            const quotient = randInt(8, 15);
+            const dividend = divisor * quotient;
+
+            return {
+                question: `What is ${dividend} ÷ ${divisor}?`,
+                correctAnswer: quotient.toString(),
+                wrongAnswers: [
+                    (quotient + 1).toString(),
+                    (quotient - 1).toString(),
+                    (quotient + randInt(2, 5)).toString()
+                ]
+            };
+        }
+
+        function generateFraction() {
+            const denominators = [4, 5, 8, 10];
+            const denom = denominators[randInt(0, denominators.length - 1)];
+            const num = randInt(1, denom - 1);
+            const decimal = (num / denom).toFixed(2);
+
+            // Simplify fraction
+            const divisor = gcd(num, denom);
+            const simplifiedNum = num / divisor;
+            const simplifiedDenom = denom / divisor;
+            const answer = `${simplifiedNum}/${simplifiedDenom}`;
+
+            return {
+                question: `What is ${decimal} as a fraction in simplest form?`,
+                correctAnswer: answer,
+                wrongAnswers: [
+                    `${num}/${denom}`,
+                    `${simplifiedNum * 2}/${simplifiedDenom * 2}`,
+                    `${simplifiedNum + 1}/${simplifiedDenom}`
+                ].filter(ans => ans !== answer)
+            };
+        }
+
+        function generateArea() {
+            const length = randInt(6, 20);
+            const width = randInt(4, 15);
+            const answer = length * width;
+
+            return {
+                question: `If a rectangle has a length of ${length} cm and width of ${width} cm, what is its area?`,
+                correctAnswer: `${answer} cm²`,
+                wrongAnswers: [
+                    `${length + width} cm²`,
+                    `${2 * (length + width)} cm²`,
+                    `${answer + randInt(5, 15)} cm²`
+                ]
+            };
+        }
+
+        function generatePerimeter() {
+            const side = randInt(5, 15);
+            const answer = side * 4;
+
+            return {
+                question: `What is the perimeter of a square with sides of ${side} inches?`,
+                correctAnswer: `${answer} inches`,
+                wrongAnswers: [
+                    `${side * side} inches`,
+                    `${side * 2} inches`,
+                    `${side * 3} inches`
+                ]
+            };
+        }
+
+        function generateMoneyProblem() {
+            const start = (randInt(20, 80) + randInt(0, 99) / 100).toFixed(2);
+            const spent = (randInt(5, parseFloat(start) - 5) + randInt(0, 99) / 100).toFixed(2);
+            const answer = (parseFloat(start) - parseFloat(spent)).toFixed(2);
+
+            const names = ['Sarah', 'Alex', 'Maria', 'James', 'Emma'];
+            const items = ['book', 'toy', 'game', 'shirt', 'snack'];
+            const name = names[randInt(0, names.length - 1)];
+            const item = items[randInt(0, items.length - 1)];
+
+            return {
+                question: `${name} has $${start}. They buy a ${item} for $${spent}. How much do they have left?`,
+                correctAnswer: `$${answer}`,
+                wrongAnswers: [
+                    `$${(parseFloat(answer) + 0.25).toFixed(2)}`,
+                    `$${(parseFloat(answer) - 0.25).toFixed(2)}`,
+                    `$${(parseFloat(start) + parseFloat(spent)).toFixed(2)}`
+                ]
+            };
+        }
+
+        function generateWordProblem() {
+            const total = randInt(80, 200);
+            const perBox = randInt(6, 15);
+            const answer = Math.floor(total / perBox);
+
+            const items = ['cookies', 'cupcakes', 'pencils', 'books', 'apples'];
+            const containers = ['boxes', 'bags', 'packs', 'crates', 'baskets'];
+            const item = items[randInt(0, items.length - 1)];
+            const container = containers[randInt(0, containers.length - 1)];
+
+            return {
+                question: `A store has ${total} ${item}. If they pack them into ${container} of ${perBox}, how many ${container} do they need?`,
+                correctAnswer: `${answer} ${container}`,
+                wrongAnswers: [
+                    `${answer + 1} ${container}`,
+                    `${answer - 1} ${container}`,
+                    `${answer + 2} ${container}`
+                ]
+            };
+        }
+
+        function generatePlaceValue() {
+            const digits = [randInt(1, 9), randInt(0, 9), randInt(0, 9), randInt(0, 9), randInt(0, 9)];
+            const number = digits.join('');
+            const formattedNumber = parseInt(number).toLocaleString();
+
+            const position = randInt(0, 4);
+            const digit = digits[position];
+            const values = [1, 10, 100, 1000, 10000];
+            const valueNames = ['1', '10', '100', '1,000', '10,000'];
+            const answer = (digit * values[4 - position]).toLocaleString();
+
+            return {
+                question: `What is the value of the ${digit} in the number ${formattedNumber}?`,
+                correctAnswer: answer,
+                wrongAnswers: [
+                    digit.toString(),
+                    (digit * values[4 - position - 1]).toLocaleString(),
+                    (digit * values[4 - position + 1] || digit * 100000).toLocaleString()
+                ].filter((val, idx, arr) => arr.indexOf(val) === idx && val !== answer)
+            };
+        }
+
+        // Generate a random problem
+        function generateProblem() {
+            const problemTypes = [
+                generateAddition,
+                generateSubtraction,
+                generateMultiplication,
+                generateDivision,
+                generateFraction,
+                generateArea,
+                generatePerimeter,
+                generateMoneyProblem,
+                generateWordProblem,
+                generatePlaceValue
+            ];
+
+            const generator = problemTypes[randInt(0, problemTypes.length - 1)];
+            const problem = generator();
+
+            // Ensure we have exactly 3 wrong answers
+            while (problem.wrongAnswers.length < 3) {
+                problem.wrongAnswers.push(problem.correctAnswer + randInt(1, 10));
+            }
+            problem.wrongAnswers = problem.wrongAnswers.slice(0, 3);
+
+            // Create shuffled answers array
+            const allAnswers = [problem.correctAnswer, ...problem.wrongAnswers];
+            const shuffledAnswers = shuffle(allAnswers);
+
+            return {
+                question: problem.question,
+                answers: shuffledAnswers,
+                correct: shuffledAnswers.indexOf(problem.correctAnswer)
+            };
+        }
 
         function loadQuestion() {
             answered = false;
-            const q = questions[currentQuestion];
-            
-            document.getElementById('questionText').textContent = q.question;
-            document.getElementById('questionNum').textContent = `${currentQuestion + 1}/10`;
+            currentProblem = generateProblem();
+
+            document.getElementById('questionText').textContent = currentProblem.question;
+            document.getElementById('questionNum').textContent = `${currentQuestion + 1}/${totalQuestions}`;
             document.getElementById('feedback').textContent = '';
             document.getElementById('nextBtn').disabled = true;
-            
-            const progress = ((currentQuestion) / questions.length) * 100;
+
+            const progress = ((currentQuestion) / totalQuestions) * 100;
             document.getElementById('progressFill').style.width = progress + '%';
-            
+
             const optionsContainer = document.getElementById('answerOptions');
             optionsContainer.innerHTML = '';
-            
-            q.answers.forEach((answer, index) => {
+
+            currentProblem.answers.forEach((answer, index) => {
                 const btn = document.createElement('button');
                 btn.className = 'answer-btn';
                 btn.textContent = answer;
@@ -340,21 +527,20 @@
         function checkAnswer(selected) {
             if (answered) return;
             answered = true;
-            
-            const q = questions[currentQuestion];
+
             const buttons = document.querySelectorAll('.answer-btn');
             const feedback = document.getElementById('feedback');
-            
+
             buttons.forEach((btn, index) => {
                 btn.disabled = true;
-                if (index === q.correct) {
+                if (index === currentProblem.correct) {
                     btn.classList.add('correct');
-                } else if (index === selected && selected !== q.correct) {
+                } else if (index === selected && selected !== currentProblem.correct) {
                     btn.classList.add('incorrect');
                 }
             });
-            
-            if (selected === q.correct) {
+
+            if (selected === currentProblem.correct) {
                 score += 10;
                 streak++;
                 feedback.textContent = '✓ Correct! Great job!';
@@ -364,7 +550,7 @@
                 feedback.textContent = '✗ Not quite. Keep trying!';
                 feedback.className = 'feedback incorrect';
             }
-            
+
             document.getElementById('score').textContent = score;
             document.getElementById('streak').textContent = streak + '🔥';
             document.getElementById('nextBtn').disabled = false;
@@ -372,8 +558,8 @@
 
         function nextQuestion() {
             currentQuestion++;
-            
-            if (currentQuestion < questions.length) {
+
+            if (currentQuestion < totalQuestions) {
                 loadQuestion();
             } else {
                 showEndScreen();
