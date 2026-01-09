@@ -149,12 +149,12 @@ body {
 }
 
 .hero-content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     max-width: 1200px;
     width: 100%;
-    align-items: center;
+    text-align: center;
 }
 
 .hero-title {
@@ -163,6 +163,12 @@ body {
     font-weight: 800;
     line-height: 1.1;
     margin-bottom: 20px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.hero-title:hover {
+    transform: scale(1.02);
 }
 
 .gradient-text {

@@ -111,34 +111,40 @@ revealElements.forEach(element => {
 });
 
 // ============================================
-// PROFILE IMAGE CONFETTI EFFECT
+// HERO TITLE FIREWORKS EFFECT
 // ============================================
-const profileImage = document.getElementById('profile-image');
-let confettiActive = false;
+const heroTitle = document.getElementById('hero-title');
+let fireworksActive = false;
 
-profileImage.addEventListener('click', () => {
-    if (confettiActive) return;
+heroTitle.addEventListener('click', () => {
+    if (fireworksActive) return;
 
-    confettiActive = true;
-    const confettiCount = 30;
+    fireworksActive = true;
+    const fireworksCount = 50;
     const colors = ['#00FFFF', '#FF00FF', '#00FF00', '#FFFF00'];
 
-    for (let i = 0; i < confettiCount; i++) {
-        const confetti = document.createElement('div');
-        confetti.style.position = 'fixed';
-        confetti.style.left = profileImage.offsetLeft + profileImage.offsetWidth / 2 + 'px';
-        confetti.style.top = profileImage.offsetTop + profileImage.offsetHeight / 2 + 'px';
-        confetti.style.width = '10px';
-        confetti.style.height = '10px';
-        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-        confetti.style.pointerEvents = 'none';
-        confetti.style.zIndex = '9999';
-        confetti.style.borderRadius = '50%';
+    // Get the center of the hero title
+    const rect = heroTitle.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
 
-        document.body.appendChild(confetti);
+    for (let i = 0; i < fireworksCount; i++) {
+        const firework = document.createElement('div');
+        firework.style.position = 'fixed';
+        firework.style.left = centerX + 'px';
+        firework.style.top = centerY + 'px';
+        firework.style.width = '10px';
+        firework.style.height = '10px';
+        firework.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        firework.style.pointerEvents = 'none';
+        firework.style.zIndex = '9999';
+        firework.style.borderRadius = '50%';
+        firework.style.boxShadow = `0 0 10px ${colors[Math.floor(Math.random() * colors.length)]}`;
 
-        const angle = (Math.PI * 2 * i) / confettiCount;
-        const velocity = 5 + Math.random() * 5;
+        document.body.appendChild(firework);
+
+        const angle = (Math.PI * 2 * i) / fireworksCount;
+        const velocity = 5 + Math.random() * 10;
         const vx = Math.cos(angle) * velocity;
         const vy = Math.sin(angle) * velocity;
 
@@ -149,15 +155,15 @@ profileImage.addEventListener('click', () => {
         const animate = () => {
             x += vx;
             y += vy + 2;
-            opacity -= 0.02;
+            opacity -= 0.015;
 
-            confetti.style.transform = `translate(${x}px, ${y}px)`;
-            confetti.style.opacity = opacity;
+            firework.style.transform = `translate(${x}px, ${y}px)`;
+            firework.style.opacity = opacity;
 
             if (opacity > 0) {
                 requestAnimationFrame(animate);
             } else {
-                confetti.remove();
+                firework.remove();
             }
         };
 
@@ -165,7 +171,7 @@ profileImage.addEventListener('click', () => {
     }
 
     setTimeout(() => {
-        confettiActive = false;
+        fireworksActive = false;
     }, 1000);
 });
 
