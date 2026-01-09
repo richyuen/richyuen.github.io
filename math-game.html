@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>5th Grade Math Challenge</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Comic Sans MS', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .game-container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .score-board {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 10px;
+        }
+        
+        .score-item {
+            text-align: center;
+        }
+        
+        .score-label {
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .score-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .question-area {
+            background: #f9f9f9;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            min-height: 200px;
+        }
+        
+        .question-text {
+            font-size: 1.4em;
+            color: #333;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        
+        .answer-options {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .answer-btn {
+            padding: 15px;
+            font-size: 1.1em;
+            border: 3px solid #667eea;
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        
+        .answer-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+        
+        .answer-btn.correct {
+            background: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+        
+        .answer-btn.incorrect {
+            background: #f44336;
+            color: white;
+            border-color: #f44336;
+        }
+        
+        .answer-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        .feedback {
+            text-align: center;
+            font-size: 1.3em;
+            margin: 20px 0;
+            font-weight: bold;
+            min-height: 30px;
+        }
+        
+        .feedback.correct {
+            color: #4CAF50;
+        }
+        
+        .feedback.incorrect {
+            color: #f44336;
+        }
+        
+        .next-btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.2em;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .next-btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+        
+        .next-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .end-screen {
+            text-align: center;
+        }
+        
+        .end-screen h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+        
+        .final-score {
+            font-size: 3em;
+            color: #4CAF50;
+            margin: 20px 0;
+        }
+        
+        .play-again-btn {
+            padding: 15px 40px;
+            font-size: 1.2em;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        
+        .play-again-btn:hover {
+            background: #45a049;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #e0e0e0;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <h1>🎮 Math Challenge!</h1>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        
+        <div class="score-board">
+            <div class="score-item">
+                <div class="score-label">Question</div>
+                <div class="score-value" id="questionNum">1/10</div>
+            </div>
+            <div class="score-item">
+                <div class="score-label">Score</div>
+                <div class="score-value" id="score">0</div>
+            </div>
+            <div class="score-item">
+                <div class="score-label">Streak</div>
+                <div class="score-value" id="streak">0🔥</div>
+            </div>
+        </div>
+        
+        <div id="gameArea">
+            <div class="question-area">
+                <div class="question-text" id="questionText"></div>
+                <div class="answer-options" id="answerOptions"></div>
+            </div>
+            
+            <div class="feedback" id="feedback"></div>
+            
+            <button class="next-btn" id="nextBtn" disabled>Next Question</button>
+        </div>
+        
+        <div id="endScreen" style="display: none;">
+            <div class="end-screen">
+                <h2>🎉 Great Job!</h2>
+                <div class="final-score" id="finalScore"></div>
+                <p style="font-size: 1.2em; color: #666;">Keep practicing to become a math master!</p>
+                <button class="play-again-btn" onclick="location.reload()">Play Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const questions = [
+            {
+                question: "What is 3/4 + 1/4?",
+                answers: ["1", "4/8", "1/2", "2/4"],
+                correct: 0
+            },
+            {
+                question: "If a rectangle has a length of 12 cm and width of 8 cm, what is its area?",
+                answers: ["20 cm²", "96 cm²", "40 cm²", "48 cm²"],
+                correct: 1
+            },
+            {
+                question: "What is 0.75 as a fraction in simplest form?",
+                answers: ["75/100", "3/4", "7/5", "15/20"],
+                correct: 1
+            },
+            {
+                question: "A bakery made 144 cookies. If they pack them into boxes of 12, how many boxes do they need?",
+                answers: ["10 boxes", "11 boxes", "12 boxes", "13 boxes"],
+                correct: 2
+            },
+            {
+                question: "What is 8 × 12?",
+                answers: ["84", "96", "104", "88"],
+                correct: 1
+            },
+            {
+                question: "If 2/5 of a class of 30 students are boys, how many boys are in the class?",
+                answers: ["10", "12", "15", "18"],
+                correct: 1
+            },
+            {
+                question: "What is the value of the 7 in the number 47,352?",
+                answers: ["7", "70", "700", "7,000"],
+                correct: 3
+            },
+            {
+                question: "Sarah has $45.50. She buys a book for $12.75. How much does she have left?",
+                answers: ["$32.75", "$33.75", "$32.25", "$33.25"],
+                correct: 0
+            },
+            {
+                question: "What is the perimeter of a square with sides of 9 inches?",
+                answers: ["18 inches", "27 inches", "36 inches", "81 inches"],
+                correct: 2
+            },
+            {
+                question: "Which of these is equivalent to 2.6?",
+                answers: ["2 3/5", "2 6/10", "26/10", "All of the above"],
+                correct: 3
+            }
+        ];
+
+        let currentQuestion = 0;
+        let score = 0;
+        let streak = 0;
+        let answered = false;
+
+        function loadQuestion() {
+            answered = false;
+            const q = questions[currentQuestion];
+            
+            document.getElementById('questionText').textContent = q.question;
+            document.getElementById('questionNum').textContent = `${currentQuestion + 1}/10`;
+            document.getElementById('feedback').textContent = '';
+            document.getElementById('nextBtn').disabled = true;
+            
+            const progress = ((currentQuestion) / questions.length) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+            
+            const optionsContainer = document.getElementById('answerOptions');
+            optionsContainer.innerHTML = '';
+            
+            q.answers.forEach((answer, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'answer-btn';
+                btn.textContent = answer;
+                btn.onclick = () => checkAnswer(index);
+                optionsContainer.appendChild(btn);
+            });
+        }
+
+        function checkAnswer(selected) {
+            if (answered) return;
+            answered = true;
+            
+            const q = questions[currentQuestion];
+            const buttons = document.querySelectorAll('.answer-btn');
+            const feedback = document.getElementById('feedback');
+            
+            buttons.forEach((btn, index) => {
+                btn.disabled = true;
+                if (index === q.correct) {
+                    btn.classList.add('correct');
+                } else if (index === selected && selected !== q.correct) {
+                    btn.classList.add('incorrect');
+                }
+            });
+            
+            if (selected === q.correct) {
+                score += 10;
+                streak++;
+                feedback.textContent = '✓ Correct! Great job!';
+                feedback.className = 'feedback correct';
+            } else {
+                streak = 0;
+                feedback.textContent = '✗ Not quite. Keep trying!';
+                feedback.className = 'feedback incorrect';
+            }
+            
+            document.getElementById('score').textContent = score;
+            document.getElementById('streak').textContent = streak + '🔥';
+            document.getElementById('nextBtn').disabled = false;
+        }
+
+        function nextQuestion() {
+            currentQuestion++;
+            
+            if (currentQuestion < questions.length) {
+                loadQuestion();
+            } else {
+                showEndScreen();
+            }
+        }
+
+        function showEndScreen() {
+            document.getElementById('gameArea').style.display = 'none';
+            document.getElementById('endScreen').style.display = 'block';
+            document.getElementById('progressFill').style.width = '100%';
+            
+            const percentage = (score / 100) * 100;
+            let message = '';
+            
+            if (percentage >= 90) {
+                message = '🌟 Outstanding! You\'re a math superstar!';
+            } else if (percentage >= 70) {
+                message = '👍 Great work! Keep it up!';
+            } else if (percentage >= 50) {
+                message = '💪 Good effort! Practice makes perfect!';
+            } else {
+                message = '🎯 Keep practicing! You\'ll get better!';
+            }
+            
+            document.getElementById('finalScore').textContent = `${score}/100`;
+            document.querySelector('.end-screen p').textContent = message;
+        }
+
+        document.getElementById('nextBtn').onclick = nextQuestion;
+
+        // Load first question
+        loadQuestion();
+    </script>
+</body>
+</html>
