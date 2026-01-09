@@ -1,14 +1,4 @@
 // ============================================
-// PAGE LOADER
-// ============================================
-window.addEventListener('load', () => {
-    const loader = document.getElementById('loader');
-    setTimeout(() => {
-        loader.classList.add('hidden');
-    }, 1500);
-});
-
-// ============================================
 // CURSOR TRAIL
 // ============================================
 const canvas = document.getElementById('cursor-trail');
