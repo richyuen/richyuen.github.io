@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recipe Finder - Richard Yuen</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .back-link {
+            display: inline-block;
+            color: white;
+            text-decoration: none;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            transition: all 0.3s;
+        }
+
+        .back-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .search-section {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            margin-bottom: 30px;
+        }
+
+        .ingredient-input-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .ingredient-input {
+            flex: 1;
+            padding: 15px;
+            font-size: 1.1em;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            outline: none;
+        }
+
+        .ingredient-input:focus {
+            border-color: #667eea;
+        }
+
+        .add-ingredient-btn {
+            padding: 15px 30px;
+            font-size: 1.1em;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .add-ingredient-btn:hover {
+            background: #5568d3;
+        }
+
+        .ingredients-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            min-height: 40px;
+        }
+
+        .ingredient-tag {
+            background: #667eea;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .remove-ingredient {
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .search-btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.2em;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .search-btn:hover {
+            background: #229954;
+            transform: translateY(-2px);
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .filter-select {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .recipes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        .recipe-card {
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .recipe-card:hover {
+            transform: translateY(-10px);
+        }
+
+        .recipe-image {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4em;
+        }
+
+        .recipe-content {
+            padding: 25px;
+        }
+
+        .recipe-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .recipe-info {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            color: #666;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .recipe-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .tag {
+            background: #f0f0f0;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            color: #667eea;
+        }
+
+        .recipe-description {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .nutrition-info {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .nutrition-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+
+        .nutrition-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .nutrition-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+        }
+
+        .view-recipe-btn {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 15px;
+        }
+
+        .view-recipe-btn:hover {
+            background: #5568d3;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: white;
+            font-size: 1.5em;
+            padding: 60px 20px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: white;
+            max-width: 800px;
+            margin: 40px auto;
+            border-radius: 20px;
+            padding: 40px;
+            position: relative;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 2em;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .close-modal:hover {
+            color: #333;
+        }
+
+        .ingredients-section, .instructions-section {
+            margin-top: 30px;
+        }
+
+        .ingredients-section h3, .instructions-section h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .ingredients-section ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .ingredients-section li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .ingredients-section li:before {
+            content: "✓ ";
+            color: #27ae60;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .instructions-section ol {
+            padding-left: 20px;
+        }
+
+        .instructions-section li {
+            padding: 10px 0;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <a href="index.html" class="back-link">← Back to Portfolio</a>
+            <h1>🍳 Recipe Finder</h1>
+            <p>Discover delicious recipes based on ingredients you have</p>
+        </header>
+
+        <div class="search-section">
+            <h2 style="margin-bottom: 20px; color: #667eea;">What ingredients do you have?</h2>
+            <div class="ingredient-input-group">
+                <input type="text" id="ingredientInput" class="ingredient-input" placeholder="Enter an ingredient (e.g., chicken, tomatoes)...">
+                <button class="add-ingredient-btn" onclick="addIngredient()">Add</button>
+            </div>
+            <div class="ingredients-list" id="ingredientsList"></div>
+
+            <div class="filters">
+                <select class="filter-select" id="cuisineFilter">
+                    <option value="">All Cuisines</option>
+                    <option value="italian">Italian</option>
+                    <option value="mexican">Mexican</option>
+                    <option value="asian">Asian</option>
+                    <option value="american">American</option>
+                </select>
+                <select class="filter-select" id="timeFilter">
+                    <option value="">Any Time</option>
+                    <option value="quick">Under 30 min</option>
+                    <option value="medium">30-60 min</option>
+                    <option value="long">Over 60 min</option>
+                </select>
+            </div>
+
+            <button class="search-btn" onclick="searchRecipes()">Find Recipes</button>
+        </div>
+
+        <div class="recipes-grid" id="recipesGrid"></div>
+    </div>
+
+    <!-- Recipe Detail Modal -->
+    <div class="modal" id="recipeModal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <div id="modalRecipeContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedIngredients = [];
+
+        const recipes = [
+            {
+                id: 1,
+                name: 'Classic Chicken Pasta',
+                icon: '🍝',
+                time: 30,
+                servings: 4,
+                cuisine: 'italian',
+                ingredients: ['chicken', 'pasta', 'tomatoes', 'garlic'],
+                description: 'A delicious and easy pasta dish with tender chicken in a rich tomato sauce.',
+                nutrition: { calories: 450, protein: '32g', carbs: '48g', fat: '14g' },
+                fullIngredients: ['2 chicken breasts, diced', '12 oz pasta', '3 tomatoes, chopped', '4 cloves garlic', '2 tbsp olive oil', 'Salt and pepper'],
+                instructions: [
+                    'Cook pasta according to package directions',
+                    'Season chicken with salt and pepper',
+                    'Heat olive oil in a large pan and cook chicken until golden',
+                    'Add garlic and tomatoes, cook for 5 minutes',
+                    'Toss with cooked pasta and serve hot'
+                ]
+            },
+            {
+                id: 2,
+                name: 'Beef Tacos',
+                icon: '🌮',
+                time: 25,
+                servings: 4,
+                cuisine: 'mexican',
+                ingredients: ['beef', 'tortillas', 'cheese', 'lettuce'],
+                description: 'Quick and tasty beef tacos with fresh toppings.',
+                nutrition: { calories: 380, protein: '28g', carbs: '32g', fat: '16g' },
+                fullIngredients: ['1 lb ground beef', '8 taco shells', '1 cup shredded cheese', '2 cups lettuce', '1 onion, diced', 'Taco seasoning'],
+                instructions: [
+                    'Brown the ground beef in a large skillet',
+                    'Add taco seasoning and cook according to package',
+                    'Warm taco shells in oven',
+                    'Fill shells with beef, cheese, lettuce, and onion',
+                    'Serve with your favorite toppings'
+                ]
+            },
+            {
+                id: 3,
+                name: 'Vegetable Stir Fry',
+                icon: '🥘',
+                time: 20,
+                servings: 3,
+                cuisine: 'asian',
+                ingredients: ['vegetables', 'rice', 'soy sauce', 'garlic'],
+                description: 'Healthy and colorful vegetable stir fry with aromatic Asian flavors.',
+                nutrition: { calories: 320, protein: '12g', carbs: '58g', fat: '6g' },
+                fullIngredients: ['2 cups mixed vegetables', '2 cups cooked rice', '3 tbsp soy sauce', '3 cloves garlic', '1 tbsp sesame oil', '1 tsp ginger'],
+                instructions: [
+                    'Heat sesame oil in a wok or large pan',
+                    'Add garlic and ginger, stir for 30 seconds',
+                    'Add vegetables and stir fry for 5-7 minutes',
+                    'Add soy sauce and toss well',
+                    'Serve over cooked rice'
+                ]
+            },
+            {
+                id: 4,
+                name: 'Grilled Cheese Sandwich',
+                icon: '🥪',
+                time: 10,
+                servings: 2,
+                cuisine: 'american',
+                ingredients: ['bread', 'cheese', 'butter'],
+                description: 'Classic comfort food - crispy, golden grilled cheese sandwich.',
+                nutrition: { calories: 350, protein: '14g', carbs: '28g', fat: '20g' },
+                fullIngredients: ['4 slices bread', '4 slices cheese', '2 tbsp butter'],
+                instructions: [
+                    'Butter one side of each bread slice',
+                    'Place cheese between bread slices, butter side out',
+                    'Heat a pan over medium heat',
+                    'Grill sandwich until golden brown on both sides',
+                    'Cut in half and serve hot'
+                ]
+            },
+            {
+                id: 5,
+                name: 'Chicken Fried Rice',
+                icon: '🍚',
+                time: 25,
+                servings: 4,
+                cuisine: 'asian',
+                ingredients: ['chicken', 'rice', 'vegetables', 'eggs'],
+                description: 'Restaurant-style fried rice with chicken and vegetables.',
+                nutrition: { calories: 420, protein: '26g', carbs: '52g', fat: '12g' },
+                fullIngredients: ['2 cups cooked rice', '1 lb chicken, diced', '2 eggs', '1 cup mixed vegetables', '3 tbsp soy sauce', '2 tbsp oil'],
+                instructions: [
+                    'Heat oil in a large wok or pan',
+                    'Scramble eggs and set aside',
+                    'Cook chicken until done, set aside',
+                    'Stir fry vegetables for 3 minutes',
+                    'Add rice, chicken, eggs, and soy sauce. Mix well and serve'
+                ]
+            },
+            {
+                id: 6,
+                name: 'Margherita Pizza',
+                icon: '🍕',
+                time: 45,
+                servings: 4,
+                cuisine: 'italian',
+                ingredients: ['pizza dough', 'tomatoes', 'cheese', 'basil'],
+                description: 'Classic Italian pizza with fresh tomatoes, mozzarella, and basil.',
+                nutrition: { calories: 380, protein: '16g', carbs: '48g', fat: '14g' },
+                fullIngredients: ['1 pizza dough', '3 tomatoes, sliced', '8 oz mozzarella', 'Fresh basil leaves', '2 tbsp olive oil', 'Salt'],
+                instructions: [
+                    'Preheat oven to 450°F',
+                    'Roll out pizza dough on a floured surface',
+                    'Brush with olive oil and arrange tomato slices',
+                    'Top with mozzarella and season with salt',
+                    'Bake for 15-20 minutes, add fresh basil before serving'
+                ]
+            }
+        ];
+
+        function addIngredient() {
+            const input = document.getElementById('ingredientInput');
+            const ingredient = input.value.trim().toLowerCase();
+
+            if (ingredient && !selectedIngredients.includes(ingredient)) {
+                selectedIngredients.push(ingredient);
+                renderIngredients();
+                input.value = '';
+            }
+        }
+
+        function removeIngredient(ingredient) {
+            selectedIngredients = selectedIngredients.filter(i => i !== ingredient);
+            renderIngredients();
+        }
+
+        function renderIngredients() {
+            const container = document.getElementById('ingredientsList');
+            container.innerHTML = selectedIngredients.map(ing => `
+                <div class="ingredient-tag">
+                    ${ing}
+                    <span class="remove-ingredient" onclick="removeIngredient('${ing}')">×</span>
+                </div>
+            `).join('');
+        }
+
+        function searchRecipes() {
+            const cuisine = document.getElementById('cuisineFilter').value;
+            const timeFilter = document.getElementById('timeFilter').value;
+            const grid = document.getElementById('recipesGrid');
+
+            let filteredRecipes = recipes;
+
+            // Filter by ingredients
+            if (selectedIngredients.length > 0) {
+                filteredRecipes = filteredRecipes.filter(recipe =>
+                    selectedIngredients.some(ing =>
+                        recipe.ingredients.some(recipeIng => recipeIng.includes(ing))
+                    )
+                );
+            }
+
+            // Filter by cuisine
+            if (cuisine) {
+                filteredRecipes = filteredRecipes.filter(r => r.cuisine === cuisine);
+            }
+
+            // Filter by time
+            if (timeFilter === 'quick') {
+                filteredRecipes = filteredRecipes.filter(r => r.time < 30);
+            } else if (timeFilter === 'medium') {
+                filteredRecipes = filteredRecipes.filter(r => r.time >= 30 && r.time <= 60);
+            } else if (timeFilter === 'long') {
+                filteredRecipes = filteredRecipes.filter(r => r.time > 60);
+            }
+
+            if (filteredRecipes.length === 0) {
+                grid.innerHTML = '<div class="empty-state">No recipes found. Try different ingredients or filters!</div>';
+                return;
+            }
+
+            grid.innerHTML = filteredRecipes.map(recipe => `
+                <div class="recipe-card" onclick="showRecipeDetail(${recipe.id})">
+                    <div class="recipe-image">${recipe.icon}</div>
+                    <div class="recipe-content">
+                        <h3 class="recipe-title">${recipe.name}</h3>
+                        <div class="recipe-info">
+                            <div class="info-item">⏱️ ${recipe.time} min</div>
+                            <div class="info-item">👥 ${recipe.servings} servings</div>
+                        </div>
+                        <div class="recipe-tags">
+                            <span class="tag">${recipe.cuisine}</span>
+                            ${recipe.ingredients.slice(0, 3).map(ing => `<span class="tag">${ing}</span>`).join('')}
+                        </div>
+                        <p class="recipe-description">${recipe.description}</p>
+                        <div class="nutrition-info">
+                            <div class="nutrition-title">Nutrition (per serving)</div>
+                            <div class="nutrition-grid">
+                                <div class="nutrition-item"><span>Calories</span><span>${recipe.nutrition.calories}</span></div>
+                                <div class="nutrition-item"><span>Protein</span><span>${recipe.nutrition.protein}</span></div>
+                                <div class="nutrition-item"><span>Carbs</span><span>${recipe.nutrition.carbs}</span></div>
+                                <div class="nutrition-item"><span>Fat</span><span>${recipe.nutrition.fat}</span></div>
+                            </div>
+                        </div>
+                        <button class="view-recipe-btn">View Full Recipe</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showRecipeDetail(recipeId) {
+            const recipe = recipes.find(r => r.id === recipeId);
+            const modal = document.getElementById('recipeModal');
+            const content = document.getElementById('modalRecipeContent');
+
+            content.innerHTML = `
+                <div style="font-size: 4em; text-align: center; margin-bottom: 20px;">${recipe.icon}</div>
+                <h2 style="color: #667eea; text-align: center; margin-bottom: 30px;">${recipe.name}</h2>
+                <div style="display: flex; justify-content: center; gap: 30px; margin-bottom: 30px; color: #666;">
+                    <div>⏱️ ${recipe.time} minutes</div>
+                    <div>👥 ${recipe.servings} servings</div>
+                    <div>🌍 ${recipe.cuisine}</div>
+                </div>
+                <div class="ingredients-section">
+                    <h3>Ingredients</h3>
+                    <ul>
+                        ${recipe.fullIngredients.map(ing => `<li>${ing}</li>`).join('')}
+                    </ul>
+                </div>
+                <div class="instructions-section">
+                    <h3>Instructions</h3>
+                    <ol>
+                        ${recipe.instructions.map(step => `<li>${step}</li>`).join('')}
+                    </ol>
+                </div>
+                <div class="nutrition-info" style="margin-top: 30px;">
+                    <div class="nutrition-title">Nutrition Information (per serving)</div>
+                    <div class="nutrition-grid">
+                        <div class="nutrition-item"><span>Calories</span><span>${recipe.nutrition.calories}</span></div>
+                        <div class="nutrition-item"><span>Protein</span><span>${recipe.nutrition.protein}</span></div>
+                        <div class="nutrition-item"><span>Carbs</span><span>${recipe.nutrition.carbs}</span></div>
+                        <div class="nutrition-item"><span>Fat</span><span>${recipe.nutrition.fat}</span></div>
+                    </div>
+                </div>
+            `;
+
+            modal.style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('recipeModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('recipeModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+
+        // Allow Enter key to add ingredient
+        document.getElementById('ingredientInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addIngredient();
+            }
+        });
+
+        // Show all recipes by default
+        searchRecipes();
+    </script>
+</body>
+</html>
