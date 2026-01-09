@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Name - Personal Website</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Page Loader -->
+    <div class="loader" id="loader">
+        <div class="loader-bar"></div>
+    </div>
+
+    <!-- Floating Pixel Decorations -->
+    <div class="pixel-float pixel-1"></div>
+    <div class="pixel-float pixel-2"></div>
+    <div class="pixel-float pixel-3"></div>
+    <div class="pixel-float pixel-4"></div>
+
+    <!-- Cursor Trail -->
+    <canvas id="cursor-trail"></canvas>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <a href="#home" class="nav-link">Home</a>
+        <a href="#projects" class="nav-link">Projects</a>
+        <a href="#bio" class="nav-link">Bio</a>
+        <a href="#contact" class="nav-link">Contact</a>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-content">
+            <div class="hero-text">
+                <h1 class="hero-title">
+                    <span class="gradient-text">Hello, I'm</span><br>
+                    <span class="gradient-text glitch" data-text="Your Name">Your Name</span>
+                </h1>
+                <p class="hero-subtitle">Developer • Designer • Creator</p>
+                <p class="hero-description">Building digital experiences that make a difference</p>
+            </div>
+            <div class="hero-image">
+                <div class="pixel-frame">
+                    <div class="pixel-corner tl"></div>
+                    <div class="pixel-corner tr"></div>
+                    <div class="pixel-corner bl"></div>
+                    <div class="pixel-corner br"></div>
+                    <div class="image-container" id="profile-image">
+                        <div class="placeholder-image">
+                            <span>Your Photo</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Projects Section -->
+    <section id="projects" class="projects">
+        <h2 class="section-title gradient-text">Featured Projects</h2>
+        <div class="projects-grid">
+            <div class="project-card" data-reveal>
+                <div class="project-gradient-border"></div>
+                <div class="project-content">
+                    <h3 class="project-title">Project One</h3>
+                    <p class="project-description">A groundbreaking application that revolutionizes the way we interact with technology. Built with modern frameworks and cutting-edge design principles.</p>
+                    <div class="project-tags">
+                        <span class="tag">React</span>
+                        <span class="tag">TypeScript</span>
+                        <span class="tag">Node.js</span>
+                    </div>
+                    <a href="#" class="project-link">View Project →</a>
+                </div>
+            </div>
+
+            <div class="project-card" data-reveal>
+                <div class="project-gradient-border"></div>
+                <div class="project-content">
+                    <h3 class="project-title">Project Two</h3>
+                    <p class="project-description">An innovative solution to complex problems, featuring beautiful UI/UX and powerful functionality. Designed for scalability and performance.</p>
+                    <div class="project-tags">
+                        <span class="tag">Python</span>
+                        <span class="tag">Machine Learning</span>
+                        <span class="tag">Flask</span>
+                    </div>
+                    <a href="#" class="project-link">View Project →</a>
+                </div>
+            </div>
+
+            <div class="project-card" data-reveal>
+                <div class="project-gradient-border"></div>
+                <div class="project-content">
+                    <h3 class="project-title">Project Three</h3>
+                    <p class="project-description">A creative exploration of modern web technologies. Features stunning animations, responsive design, and seamless user experience.</p>
+                    <div class="project-tags">
+                        <span class="tag">Vue.js</span>
+                        <span class="tag">CSS3</span>
+                        <span class="tag">WebGL</span>
+                    </div>
+                    <a href="#" class="project-link">View Project →</a>
+                </div>
+            </div>
+
+            <div class="project-card" data-reveal>
+                <div class="project-gradient-border"></div>
+                <div class="project-content">
+                    <h3 class="project-title">Project Four</h3>
+                    <p class="project-description">Open-source contribution to the developer community. Helping others build better software through shared knowledge and collaboration.</p>
+                    <div class="project-tags">
+                        <span class="tag">JavaScript</span>
+                        <span class="tag">Open Source</span>
+                        <span class="tag">API</span>
+                    </div>
+                    <a href="#" class="project-link">View Project →</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Bio Section -->
+    <section id="bio" class="bio">
+        <h2 class="section-title gradient-text">About Me</h2>
+        <div class="bio-content">
+            <p class="bio-text drop-cap">
+                <span class="first-letter">I</span>'m a passionate developer and creative thinker with a love for building beautiful, functional digital experiences. With years of experience in web development, I specialize in creating user-centric applications that solve real-world problems.
+            </p>
+            <div class="gradient-divider"></div>
+            <p class="bio-text">
+                My journey in tech started with a curiosity about how things work. Today, I combine technical expertise with creative design to build products that people love to use. When I'm not coding, you can find me exploring new technologies, contributing to open source, or sharing knowledge with the community.
+            </p>
+            <div class="gradient-divider"></div>
+            <p class="bio-text">
+                I believe in the power of technology to make positive change. Whether it's through clean code, thoughtful design, or innovative solutions, I'm always looking for ways to push boundaries and create something meaningful.
+            </p>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact">
+        <h2 class="section-title gradient-text">Get In Touch</h2>
+        <div class="contact-content">
+            <p class="contact-text">Interested in working together? Let's create something amazing.</p>
+            <div class="contact-links">
+                <a href="mailto:your.email@example.com" class="contact-link">
+                    <span class="link-label">Email</span>
+                    <span class="link-value">your.email@example.com</span>
+                </a>
+                <a href="https://github.com/yourusername" class="contact-link" target="_blank" rel="noopener">
+                    <span class="link-label">GitHub</span>
+                    <span class="link-value">@yourusername</span>
+                </a>
+                <a href="https://twitter.com/yourusername" class="contact-link" target="_blank" rel="noopener">
+                    <span class="link-label">Twitter</span>
+                    <span class="link-value">@yourusername</span>
+                </a>
+                <a href="https://linkedin.com/in/yourusername" class="contact-link" target="_blank" rel="noopener">
+                    <span class="link-label">LinkedIn</span>
+                    <span class="link-value">/in/yourusername</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Back to Top Button -->
+    <button class="back-to-top" id="backToTop" aria-label="Back to top">↑</button>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p class="footer-text">© 2026 Your Name. Built with <span class="gradient-text">passion</span> and <span class="gradient-text">code</span>.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
