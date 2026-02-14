@@ -1,38 +1,80 @@
 # AGENTS.md
 
 ## Purpose
-This repository hosts a personal portfolio homepage (`index.html`) plus several standalone web projects in the root and one modular game app in `RoadRageQix/`.
+Repository-specific instructions for coding agents working in `C:\Git\RYWebsite`.
 
-## Repository Layout
-- `index.html`, `styles.css`, `script.js`: portfolio landing page and shared site styling/behavior.
-- `math-game.html`, `weather-dashboard.html`, `sp500-dashboard.html`, `recipe-finder.html`: standalone project pages.
-- `RoadRageQix/`: modular canvas game with separate source files under `RoadRageQix/src/`.
-- `favicon.svg`, `CNAME`: site assets/config.
+This repo is a static portfolio site plus a modular HTML5 game project (`RoadRageQix`).
 
-## Working Rules
-1. Keep existing visual style and class naming unless a task explicitly asks for redesign.
-2. When adding a new project to the homepage:
-   - Add a matching nav entry in the `<nav class="nav">` block.
-   - Add a new project card in `#projects .projects-grid`.
-   - Ensure card link and nav link point to the same target path.
-3. Prefer minimal, surgical edits over broad refactors.
-4. Do not break standalone pages by introducing shared build tooling unless requested.
-5. Use relative links that work when deployed as static files (GitHub Pages style hosting).
+## Current Repository Map
 
-## RoadRageQix Notes
+- Root portfolio:
+  - `index.html`, `styles.css`, `script.js`
+  - standalone pages: `math-game.html`, `weather-dashboard.html`, `sp500-dashboard.html`, `recipe-finder.html`
+  - site config/assets: `favicon.svg`, `CNAME`
+- Game project:
+  - `RoadRageQix/index.html`, `RoadRageQix/styles.css`
+  - gameplay code: `RoadRageQix/src/*.js`
+  - package metadata: `RoadRageQix/package.json`, `RoadRageQix/package-lock.json`
+  - docs/log: `RoadRageQix/README.md`, `RoadRageQix/progress.md`
+  - generated artifacts: `RoadRageQix/output/`
+  - local dependencies: `RoadRageQix/node_modules/`
+
+## Editing Rules
+
+1. Make targeted edits; do not refactor unrelated files.
+2. Preserve the existing visual direction unless a redesign is explicitly requested.
+3. Keep all paths static-host friendly (relative links that work under GitHub Pages style hosting).
+4. Never edit generated dependency/vendor files under `RoadRageQix/node_modules/`.
+5. Treat files under `RoadRageQix/output/` as generated artifacts; do not hand-edit them.
+
+## Homepage Project Integration Rule
+
+When adding/removing/updating a project on the portfolio homepage, update both:
+
+1. nav entry inside `<nav class="nav">` in `index.html`
+2. project card inside `#projects .projects-grid` in `index.html`
+
+Both links must target the same path.
+
+## RoadRageQix Runtime Notes
+
 - Entry point: `RoadRageQix/index.html`
-- Main runtime: `RoadRageQix/src/main.js`
+- App bootstrap: `RoadRageQix/src/main.js`
 - Core game state/logic: `RoadRageQix/src/game.js`
 - Rendering: `RoadRageQix/src/render.js`
-- Input handling: `RoadRageQix/src/input.js`
-- Collision/helpers: `RoadRageQix/src/collision.js`, `RoadRageQix/src/entities.js`
+- Input: `RoadRageQix/src/input.js`
+- Entities/collision helpers: `RoadRageQix/src/entities.js`, `RoadRageQix/src/collision.js`
 
-When editing gameplay behavior, keep `render_game_to_text` and `advanceTime` hooks intact in `main.js` since they are useful for scripted verification.
+Keep deterministic test hooks intact unless explicitly asked to remove/rename:
+
+- `window.render_game_to_text()`
+- `window.advanceTime(ms)`
+
+## Documentation Maintenance Rule
+
+When folder structure, run commands, or gameplay controls change, keep these files in sync in the same change set:
+
+1. `README.md`
+2. `AGENTS.md`
+3. `RoadRageQix/README.md`
+4. `RoadRageQix/progress.md` (append dated entry; do not rewrite history)
 
 ## Local Verification
-1. Serve the repo from a local HTTP server (recommended for module-based pages):
-   - `python -m http.server 8000`
-2. Open:
-   - `http://localhost:8000/index.html`
-   - `http://localhost:8000/RoadRageQix/`
-3. Verify homepage links, project cards, and menu entries after any navigation/content changes.
+
+Primary check (repo root):
+
+```bash
+python -m http.server 8000
+```
+
+Open and verify:
+
+- `http://localhost:8000/index.html`
+- `http://localhost:8000/RoadRageQix/`
+
+Game-only alternative (from `RoadRageQix/`):
+
+```bash
+npm install
+npm run serve
+```
