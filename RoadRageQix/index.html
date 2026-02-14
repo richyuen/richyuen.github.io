@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Road Rage Qix</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <canvas id="game-canvas" aria-label="Road Rage Qix game canvas"></canvas>
+      <section id="touch-controls" class="touch-controls" aria-label="Touch controls">
+        <div id="touch-pad" class="touch-pad" role="group" aria-label="Movement joystick">
+          <div class="touch-pad-ring"></div>
+          <div id="touch-pad-knob" class="touch-pad-knob"></div>
+        </div>
+        <div class="touch-buttons">
+          <button id="touch-restart" type="button" class="touch-btn">Ignition</button>
+          <button id="touch-fullscreen" type="button" class="touch-btn">Fullscreen</button>
+        </div>
+      </section>
+      <section id="menu-overlay" class="overlay">
+        <h1>ROAD RAGE: WASTELAND CLAIM</h1>
+        <p>Stake territory before the inferno spike-ball burns your trail.</p>
+        <ul>
+          <li>Move: WASD or Arrow Keys</li>
+          <li>Touch: left joystick + action buttons</li>
+          <li>Draw a trail through open territory and reconnect to walls</li>
+          <li>Win at 75% claim, avoid contact with active trail and chassis</li>
+          <li>Press F for fullscreen, Esc to exit fullscreen</li>
+        </ul>
+        <button id="start-btn" type="button">Start Engine</button>
+      </section>
+    </main>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

@@ -1,37 +1,48 @@
-# Personal Website
+# RYWebsite
 
-A cyberpunk-inspired personal portfolio website with interactive animations and modern design.
+Personal portfolio site with a cyberpunk-styled landing page and multiple standalone web projects.
 
-## Features
+## Project Structure
 
-- Neon cyberpunk aesthetic with cyan and magenta color scheme
-- Interactive cursor trail with particle effects
-- Animated floating pixel decorations
-- Project showcase grid with hover effects
-- Responsive design for all devices
-- Smooth scroll navigation
-- Profile image with confetti effect
-- Easter eggs and interactive elements
+- `index.html`: portfolio homepage with navigation, project cards, bio, and contact sections.
+- `styles.css`, `script.js`: shared homepage styling and interactions.
+- `math-game.html`: 5th Grade Math Challenge.
+- `weather-dashboard.html`: weather dashboard demo.
+- `sp500-dashboard.html`: S&P 500 dashboard demo.
+- `recipe-finder.html`: recipe finder demo.
+- `RoadRageQix/`: modular HTML5 canvas game (`Road Rage: Wasteland Claim`).
 
-## Technologies
+## RoadRageQix Structure
 
-- HTML5
-- CSS3 (with animations and grid layout)
-- Vanilla JavaScript
-- Google Fonts (Syne, Space Mono, Silkscreen)
-
-## Customization
-
-Edit `index.html` to update:
-- Your name and bio
-- Profile photo
-- Project information
-- Contact details
+- `RoadRageQix/index.html`: game shell and overlays.
+- `RoadRageQix/styles.css`: game-specific styling.
+- `RoadRageQix/src/main.js`: bootstrap loop and input wiring.
+- `RoadRageQix/src/game.js`: game state, updates, win/loss logic.
+- `RoadRageQix/src/render.js`: rendering pipeline.
+- `RoadRageQix/src/input.js`: keyboard/touch input controller.
+- `RoadRageQix/src/collision.js`, `RoadRageQix/src/entities.js`: utility/game entity helpers.
 
 ## Local Development
 
-Simply open `index.html` in your browser to view the site locally.
+Use a local HTTP server so module-based pages run consistently:
 
-## License
+```bash
+python -m http.server 8000
+```
 
-Feel free to use this template for your own personal website!
+Then open:
+
+- `http://localhost:8000/index.html`
+- `http://localhost:8000/RoadRageQix/`
+
+## Updating Homepage Projects
+
+When adding a new project, update both locations in `index.html`:
+
+1. Add a nav link in `<nav class="nav">`.
+2. Add a project card in `#projects .projects-grid`.
+3. Keep both links pointed to the same target URL/path.
+
+## Agent Guidance
+
+Repository-specific agent instructions are in `AGENTS.md`.
