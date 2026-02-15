@@ -1,0 +1,14 @@
+{
+  "name": "qix",
+  "version": "1.0.0",
+  "scripts": {
+    "serve": "python -m http.server 5173"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "playwright": "^1.58.2"
+  }
+}

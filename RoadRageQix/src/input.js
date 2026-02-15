@@ -4,6 +4,7 @@ export class InputController {
     this.virtualKeys = new Set();
     this.justPressed = new Set();
     this.virtualAxis = { x: 0, y: 0 };
+    this.rotateForPortrait = false;
     this.target = target;
 
     this.onKeyDown = (event) => {
@@ -40,6 +41,13 @@ export class InputController {
     x = Math.max(-1, Math.min(1, x));
     y = Math.max(-1, Math.min(1, y));
 
+    if (this.rotateForPortrait) {
+      const mappedX = y;
+      const mappedY = -x;
+      x = mappedX;
+      y = mappedY;
+    }
+
     if (x !== 0 && y !== 0) {
       const inv = 1 / Math.sqrt(2);
       x *= inv;
@@ -56,6 +64,10 @@ export class InputController {
   setVirtualAxis(x, y) {
     this.virtualAxis.x = Number.isFinite(x) ? Math.max(-1, Math.min(1, x)) : 0;
     this.virtualAxis.y = Number.isFinite(y) ? Math.max(-1, Math.min(1, y)) : 0;
+  }
+
+  setScreenRotation(enabled) {
+    this.rotateForPortrait = Boolean(enabled);
   }
 
   pressVirtual(code) {

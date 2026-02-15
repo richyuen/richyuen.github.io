@@ -138,3 +138,18 @@ Original prompt: Create a Javascript web-based area-fill game like Qix. Make it 
 - Confirmed current runtime/debug hooks remain part of the documented interface:
   - `window.render_game_to_text()`
   - `window.advanceTime(ms)`
+
+## 2026-02-14 Portrait mode auto-rotation fix
+- Fixed portrait detection behavior in `src/main.js`:
+  - Removed touch-only gate from auto-rotation logic.
+  - Portrait mode now activates based on viewport orientation by default.
+  - Added explicit override support: `?portrait=0` to disable and `?portrait=1` to force.
+- Validation:
+  - Skill Playwright client regression run (touch flow): `output/portrait-fix-client`.
+  - Non-touch viewport checks via Playwright:
+    - landscape viewport -> `presentation.rotatedPortrait=false`
+    - portrait viewport -> `presentation.rotatedPortrait=true`
+    - portrait viewport + `?portrait=0` -> `presentation.rotatedPortrait=false`
+  - Artifacts:
+    - `output/portrait-auto-check/landscape-shot.png`
+    - `output/portrait-auto-check/portrait-shot.png`

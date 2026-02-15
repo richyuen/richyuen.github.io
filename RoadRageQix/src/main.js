@@ -19,12 +19,33 @@ const fixedStep = 1 / 60;
 let manualStepping = false;
 let activeTouchPointerId = null;
 
-const forceTouchControls = new URLSearchParams(window.location.search).get("touch") === "1";
+const queryParams = new URLSearchParams(window.location.search);
+const forceTouchControls = queryParams.get("touch") === "1";
+const portraitParam = queryParams.get("portrait");
+const forcePortraitRotation = portraitParam === "1";
+const disablePortraitRotation = portraitParam === "0";
 const coarsePointer = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0 || "ontouchstart" in window;
 const touchEnabled = forceTouchControls || coarsePointer;
 
 if (touchEnabled) {
   document.body.classList.add("touch-enabled");
+}
+
+function shouldRotatePortrait() {
+  if (forcePortraitRotation) {
+    return true;
+  }
+  if (disablePortraitRotation) {
+    return false;
+  }
+  return window.matchMedia("(orientation: portrait)").matches || window.innerHeight > window.innerWidth;
+}
+
+function applyOrientationMode() {
+  const rotatePortrait = shouldRotatePortrait();
+  game.setPortraitRotation(rotatePortrait);
+  input.setScreenRotation(rotatePortrait);
+  document.body.classList.toggle("portrait-rotated", rotatePortrait);
 }
 
 function toggleFullscreen() {
@@ -39,10 +60,17 @@ function toggleFullscreen() {
 }
 
 window.addEventListener("resize", () => {
+  applyOrientationMode();
   game.resize();
 });
 
 document.addEventListener("fullscreenchange", () => {
+  applyOrientationMode();
+  game.resize();
+});
+
+window.addEventListener("orientationchange", () => {
+  applyOrientationMode();
   game.resize();
 });
 
@@ -173,6 +201,7 @@ function setupTouchControls() {
 }
 
 setupTouchControls();
+applyOrientationMode();
 
 startButton?.addEventListener("click", () => {
   game.startGame();

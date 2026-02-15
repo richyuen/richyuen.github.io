@@ -133,6 +133,9 @@ export class Game {
 
     this.canvasWidth = 1280;
     this.canvasHeight = 720;
+    this.layoutWidth = this.canvasWidth;
+    this.layoutHeight = this.canvasHeight;
+    this.rotateForPortrait = false;
     this.canvas.width = this.canvasWidth;
     this.canvas.height = this.canvasHeight;
 
@@ -148,6 +151,15 @@ export class Game {
     this.state = this.createFreshState();
     this.resize();
     this.syncMenuVisibility();
+  }
+
+  setPortraitRotation(enabled) {
+    const next = Boolean(enabled);
+    if (next === this.rotateForPortrait) {
+      return;
+    }
+    this.rotateForPortrait = next;
+    this.resize();
   }
 
   createFreshState() {
@@ -178,14 +190,16 @@ export class Game {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.canvasWidth = width;
     this.canvasHeight = height;
+    this.layoutWidth = this.rotateForPortrait ? this.canvasHeight : this.canvasWidth;
+    this.layoutHeight = this.rotateForPortrait ? this.canvasWidth : this.canvasHeight;
 
     const margin = 70;
     this.viewScale = Math.min(
-      (this.canvasWidth - margin * 2) / this.worldWidth,
-      (this.canvasHeight - margin * 2) / this.worldHeight
+      (this.layoutWidth - margin * 2) / this.worldWidth,
+      (this.layoutHeight - margin * 2) / this.worldHeight
     );
-    this.worldOffsetX = (this.canvasWidth - this.worldWidth * this.viewScale) * 0.5;
-    this.worldOffsetY = (this.canvasHeight - this.worldHeight * this.viewScale) * 0.5;
+    this.worldOffsetX = (this.layoutWidth - this.worldWidth * this.viewScale) * 0.5;
+    this.worldOffsetY = (this.layoutHeight - this.worldHeight * this.viewScale) * 0.5;
   }
 
   syncMenuVisibility() {
@@ -591,8 +605,8 @@ export class Game {
     const shakeX = this.screenShake > 0 ? Math.sin(this.elapsedSeconds * 70) * 8 * this.screenShake : 0;
     const shakeY = this.screenShake > 0 ? Math.cos(this.elapsedSeconds * 84) * 6 * this.screenShake : 0;
     const snapshot = {
-      canvasWidth: this.canvasWidth,
-      canvasHeight: this.canvasHeight,
+      canvasWidth: this.layoutWidth,
+      canvasHeight: this.layoutHeight,
       elapsedSeconds: this.elapsedSeconds,
       worldWidth: this.worldWidth,
       worldHeight: this.worldHeight,
@@ -602,7 +616,13 @@ export class Game {
       state: this.state,
       config,
     };
+    this.ctx.save();
+    if (this.rotateForPortrait) {
+      this.ctx.translate(this.canvasWidth, 0);
+      this.ctx.rotate(Math.PI / 2);
+    }
     renderFrame(this.ctx, snapshot);
+    this.ctx.restore();
   }
 
   renderToText() {
@@ -672,6 +692,9 @@ export class Game {
       },
       smoke: {
         count: smoke.length,
+      },
+      presentation: {
+        rotatedPortrait: this.rotateForPortrait,
       },
     };
     return JSON.stringify(payload, null, 2);

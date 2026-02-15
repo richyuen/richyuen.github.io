@@ -35,11 +35,12 @@ Arcade territory-claiming game inspired by Qix, implemented as a modular HTML5 c
 
 ## Orientation and Query Overrides
 
-- Touch devices in portrait rotate gameplay rendering for mobile readability.
+- Portrait viewports rotate gameplay rendering by default (including non-touch environments).
 - Input is remapped when portrait rotation is active.
 - Debug/query overrides:
   - `?touch=1` forces touch UI mode.
   - `?portrait=1` forces portrait-rotation mode.
+  - `?portrait=0` disables portrait-rotation mode.
 
 Examples:
 
