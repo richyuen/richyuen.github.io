@@ -449,18 +449,51 @@ function drawCar(ctx, player, elapsedSeconds) {
   ctx.restore();
 }
 
-function drawHud(ctx, state, canvasWidth) {
+function drawHud(ctx, state, canvasWidth, config) {
   const percent = Math.round(state.claimedPercent * 100);
+  const nitro = state.nitro ?? { activeSeconds: 0, cooldownSeconds: 0 };
+  const nitroReady = nitro.activeSeconds <= 0 && nitro.cooldownSeconds <= 0;
+  const nitroActive = nitro.activeSeconds > 0;
+
   ctx.fillStyle = "rgba(12, 9, 7, 0.62)";
-  ctx.fillRect(18, 14, 350, 84);
+  ctx.fillRect(18, 14, 380, 116);
   ctx.strokeStyle = "rgba(255, 194, 128, 0.5)";
   ctx.lineWidth = 1;
-  ctx.strokeRect(18, 14, 350, 84);
+  ctx.strokeRect(18, 14, 380, 116);
 
   ctx.fillStyle = "#f5d4a5";
   ctx.font = '600 20px "Bahnschrift", "Segoe UI", sans-serif';
   ctx.fillText(`Territory: ${percent}% / 75%`, 34, 46);
   ctx.fillText(`Lives: ${state.lives}`, 34, 74);
+
+  const nitroLabel = nitroActive
+    ? `IGNITION ACTIVE ${nitro.activeSeconds.toFixed(1)}s`
+    : nitroReady
+      ? "IGNITION READY (Space/Shift)"
+      : `IGNITION COOLING ${nitro.cooldownSeconds.toFixed(1)}s`;
+  ctx.fillStyle = nitroActive ? "#ffd28f" : nitroReady ? "#ffb36f" : "rgba(245, 212, 165, 0.88)";
+  ctx.font = '600 14px "Bahnschrift", "Segoe UI", sans-serif';
+  ctx.fillText(nitroLabel, 34, 97);
+
+  const barX = 34;
+  const barY = 104;
+  const barWidth = 260;
+  const barHeight = 9;
+  let fill = 1;
+  if (nitroActive) {
+    fill = nitro.activeSeconds / config.ignitionNitroDuration;
+  } else if (!nitroReady) {
+    fill = 1 - nitro.cooldownSeconds / config.ignitionNitroCooldown;
+  }
+  fill = Math.max(0, Math.min(1, fill));
+
+  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+  ctx.fillRect(barX, barY, barWidth, barHeight);
+  ctx.fillStyle = nitroActive ? "rgba(255, 180, 78, 0.95)" : "rgba(214, 120, 58, 0.92)";
+  ctx.fillRect(barX, barY, barWidth * fill, barHeight);
+  ctx.strokeStyle = "rgba(255, 206, 152, 0.85)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barWidth, barHeight);
 
   ctx.fillStyle = "rgba(245, 212, 165, 0.7)";
   ctx.font = '500 14px "Bahnschrift", "Segoe UI", sans-serif';
@@ -518,7 +551,7 @@ export function renderFrame(ctx, game) {
   ctx.strokeRect(0, 0, worldWidth, worldHeight);
   ctx.restore();
 
-  drawHud(ctx, state, canvasWidth);
+  drawHud(ctx, state, canvasWidth, config);
 
   if (state.mode === "won") {
     drawEndMessage(ctx, canvasWidth, canvasHeight, true);

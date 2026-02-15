@@ -18,11 +18,15 @@ Arcade territory-claiming game inspired by Qix, implemented as a modular HTML5 c
 
 - Keyboard movement: `WASD` or arrow keys.
 - Start in menu: `Enter` or `Space` (or click/tap Start button).
+- Ignition nitro burst while playing: `Space` or `Shift`.
 - Restart after win/loss: `Space` (or touch Ignition button).
 - Fullscreen: `F` to toggle, `Esc` to exit.
 - Touch devices:
   - left virtual joystick to steer
-  - right buttons for restart/start and fullscreen
+  - right Ignition button:
+    - menu/end states: start/restart
+    - during gameplay: nitro burst
+  - fullscreen button
 
 ## Gameplay Rules
 
@@ -31,11 +35,13 @@ Arcade territory-claiming game inspired by Qix, implemented as a modular HTML5 c
 - Reconnect trail to claimed territory to close and claim area.
 - Enemy touching player or active trail costs a life.
 - Sparks are visual only (non-damaging) but collide with claimed walls.
+- Ignition nitro gives a temporary speed boost, then cooldown.
 - Win at `75%` claimed territory.
 
 ## Orientation and Query Overrides
 
 - Portrait viewports rotate gameplay rendering by default (including non-touch environments).
+- Canvas backing resolution now tracks the live viewport to prevent stretch/distortion when rotating between portrait and landscape.
 - Input is remapped when portrait rotation is active.
 - Debug/query overrides:
   - `?touch=1` forces touch UI mode.

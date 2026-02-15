@@ -20,6 +20,11 @@ Personal portfolio site with a cyberpunk landing page and multiple standalone we
 
 Game-specific documentation lives in `RoadRageQix/README.md`.
 
+RoadRageQix control snapshot:
+- Movement: `WASD` or arrow keys.
+- Ignition nitro (temporary speed burst): `Space` or `Shift`.
+- Touch Ignition button: start/restart outside gameplay, nitro during gameplay.
+
 ## Local Development
 
 ### Serve Entire Repo (recommended)

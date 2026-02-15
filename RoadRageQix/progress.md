@@ -153,3 +153,34 @@ Original prompt: Create a Javascript web-based area-fill game like Qix. Make it 
   - Artifacts:
     - `output/portrait-auto-check/landscape-shot.png`
     - `output/portrait-auto-check/portrait-shot.png`
+
+## 2026-02-15 Portrait distortion + ignition nitro pass
+- Fixed display distortion when viewport size changes, including portrait/landscape switches while playing:
+  - Removed hard minimum backing-canvas dimensions in `src/game.js` (`900x560`) and now match internal canvas size to the live displayed canvas rect.
+  - This avoids non-uniform browser scaling/stretch in narrow portrait layouts.
+- Hardened orientation updates:
+  - `src/main.js` now re-checks orientation mode in the render loop with a change guard.
+  - `window.advanceTime(ms)` now refreshes orientation mode + resize before stepping for deterministic test consistency.
+- Added ignition nitro (temporary speed boost) for touch and non-touch:
+  - `src/game.js`: new nitro state (`activeSeconds`, `cooldownSeconds`), tuned duration/multiplier/cooldown, and activation handling.
+  - Activation input: `Space` or `Shift` while playing.
+  - Touch Ignition button now:
+    - menu/end states -> start/restart
+    - gameplay -> nitro activation
+  - Added HUD nitro status + bar in `src/render.js`.
+  - Added nitro state to `render_game_to_text()` output.
+- Docs synced for control changes:
+  - Updated `README.md`, `AGENTS.md`, `RoadRageQix/README.md`.
+- Validation:
+  - Skill Playwright client runs:
+    - `output/portrait-nitro-client`
+    - `output/portrait-nitro-client-rerun`
+    - `output/portrait-nitro-client-rerun2`
+  - Orientation + nitro state checks via Playwright:
+    - Portrait snapshot: `output/portrait-nitro-check3/portrait-shot.png`
+    - Landscape-after-switch snapshot: `output/portrait-nitro-check3/landscape-shot.png`
+    - State verification:
+      - portrait -> `presentation.rotatedPortrait=true`
+      - after switch to landscape -> `presentation.rotatedPortrait=false`
+      - nitro active -> `nitro.speedMultiplier=1.85`, `nitro.activeSeconds>0`
+    - Console error log: `output/portrait-nitro-check3/console-errors.json` (`[]`)

@@ -45,6 +45,11 @@ Both links must target the same path.
 - Input: `RoadRageQix/src/input.js`
 - Entities/collision helpers: `RoadRageQix/src/entities.js`, `RoadRageQix/src/collision.js`
 
+Current gameplay controls to preserve unless asked otherwise:
+- Move: `WASD` / arrow keys.
+- Ignition nitro: `Space` or `Shift` while playing.
+- Touch Ignition button: start/restart in menu/end states, nitro during gameplay.
+
 Keep deterministic test hooks intact unless explicitly asked to remove/rename:
 
 - `window.render_game_to_text()`

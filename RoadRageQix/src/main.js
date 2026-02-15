@@ -26,6 +26,7 @@ const forcePortraitRotation = portraitParam === "1";
 const disablePortraitRotation = portraitParam === "0";
 const coarsePointer = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0 || "ontouchstart" in window;
 const touchEnabled = forceTouchControls || coarsePointer;
+let portraitRotationEnabled = null;
 
 if (touchEnabled) {
   document.body.classList.add("touch-enabled");
@@ -43,6 +44,10 @@ function shouldRotatePortrait() {
 
 function applyOrientationMode() {
   const rotatePortrait = shouldRotatePortrait();
+  if (rotatePortrait === portraitRotationEnabled) {
+    return;
+  }
+  portraitRotationEnabled = rotatePortrait;
   game.setPortraitRotation(rotatePortrait);
   input.setScreenRotation(rotatePortrait);
   document.body.classList.toggle("portrait-rotated", rotatePortrait);
@@ -83,8 +88,14 @@ window.addEventListener("keydown", (event) => {
     document.exitFullscreen?.().catch(() => {});
   }
 
+  if (game.state.mode === "playing" && event.code === "Space") {
+    event.preventDefault();
+  }
+
   if (game.state.mode === "menu" && (event.code === "Enter" || event.code === "Space")) {
+    event.preventDefault();
     game.startGame();
+    input.flush();
   }
 });
 
@@ -167,14 +178,17 @@ function setupTouchControls() {
   };
 
   touchRestartButton?.addEventListener("pointerdown", (event) => {
-    input.pressVirtual("Space");
-    triggerTouchAction();
+    if (game.state.mode === "playing") {
+      input.pressVirtual("Space");
+    }
     event.preventDefault();
   });
   touchRestartButton?.addEventListener("pointerup", releaseTouchSpace);
   touchRestartButton?.addEventListener("pointercancel", releaseTouchSpace);
   touchRestartButton?.addEventListener("click", (event) => {
-    triggerTouchAction();
+    if (game.state.mode !== "playing") {
+      triggerTouchAction();
+    }
     event.preventDefault();
   });
 
@@ -217,6 +231,7 @@ function frame(ts) {
   if (!running) {
     return;
   }
+  applyOrientationMode();
   const dt = Math.min(0.1, (ts - lastTs) / 1000);
   lastTs = ts;
   if (!manualStepping) {
@@ -235,6 +250,8 @@ requestAnimationFrame(frame);
 window.render_game_to_text = () => game.renderToText();
 window.advanceTime = async (ms) => {
   manualStepping = true;
+  applyOrientationMode();
+  game.resize();
   const steps = Math.max(1, Math.round(ms / (1000 / 60)));
   runFixedUpdate(steps);
   game.render();

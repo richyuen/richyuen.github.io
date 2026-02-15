@@ -7,6 +7,9 @@ const config = {
   worldWidth: 960,
   worldHeight: 640,
   initialLives: 3,
+  ignitionNitroDuration: 1.35,
+  ignitionNitroMultiplier: 1.85,
+  ignitionNitroCooldown: 3.4,
   winClaimPercent: 0.75,
   playerInvulnSeconds: 1.2,
   enemySpeedMin: 165,
@@ -169,6 +172,10 @@ export class Game {
     return {
       mode: "menu",
       lives: config.initialLives,
+      nitro: {
+        activeSeconds: 0,
+        cooldownSeconds: 0,
+      },
       claimed,
       claimedPercent: getClaimedPercent(claimed),
       player,
@@ -183,8 +190,8 @@ export class Game {
   resize() {
     const rect = this.canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    const width = Math.max(900, Math.floor(rect.width || 1280));
-    const height = Math.max(560, Math.floor(rect.height || 720));
+    const width = Math.max(1, Math.floor(rect.width || this.canvas.clientWidth || 1280));
+    const height = Math.max(1, Math.floor(rect.height || this.canvas.clientHeight || 720));
     this.canvas.width = Math.floor(width * dpr);
     this.canvas.height = Math.floor(height * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -272,6 +279,7 @@ export class Game {
       return;
     }
 
+    this.updateNitro(dt, input);
     this.updatePlayer(dt, input);
     this.updateEnemy(dt);
     this.updateSparks(dt);
@@ -285,10 +293,11 @@ export class Game {
 
   updatePlayer(dt, input) {
     const axis = input.axis();
-    const { player, claimed } = this.state;
+    const { player, claimed, nitro } = this.state;
+    const nitroSpeedMultiplier = nitro.activeSeconds > 0 ? config.ignitionNitroMultiplier : 1;
 
-    player.vx = axis.x * player.speed;
-    player.vy = axis.y * player.speed;
+    player.vx = axis.x * player.speed * nitroSpeedMultiplier;
+    player.vy = axis.y * player.speed * nitroSpeedMultiplier;
 
     if (axis.x !== 0 || axis.y !== 0) {
       player.angle = Math.atan2(axis.y, axis.x);
@@ -347,6 +356,39 @@ export class Game {
     if (oldX === player.x && oldY === player.y && (axis.x !== 0 || axis.y !== 0)) {
       this.loseLife();
     }
+  }
+
+  updateNitro(dt, input) {
+    const { nitro } = this.state;
+
+    if (nitro.activeSeconds > 0) {
+      nitro.activeSeconds = Math.max(0, nitro.activeSeconds - dt);
+      if (nitro.activeSeconds === 0 && nitro.cooldownSeconds <= 0) {
+        nitro.cooldownSeconds = config.ignitionNitroCooldown;
+      }
+    } else if (nitro.cooldownSeconds > 0) {
+      nitro.cooldownSeconds = Math.max(0, nitro.cooldownSeconds - dt);
+    }
+
+    if (input.consume("Space") || input.consume("ShiftLeft") || input.consume("ShiftRight")) {
+      this.activateNitro();
+    }
+  }
+
+  activateNitro() {
+    if (this.state.mode !== "playing") {
+      return false;
+    }
+
+    const { nitro } = this.state;
+    if (nitro.activeSeconds > 0 || nitro.cooldownSeconds > 0) {
+      return false;
+    }
+
+    nitro.activeSeconds = config.ignitionNitroDuration;
+    this.screenShake = Math.max(this.screenShake, 0.26);
+    this.screenShakeTime = Math.max(this.screenShakeTime, 0.1);
+    return true;
   }
 
   recordTrailCell(idx) {
@@ -626,7 +668,7 @@ export class Game {
   }
 
   renderToText() {
-    const { player, enemy, mode, sparks, smoke, lives, claimedPercent, trailCells } = this.state;
+    const { player, enemy, mode, sparks, smoke, lives, claimedPercent, trailCells, nitro } = this.state;
     let claimedCells = 0;
     let minClaimCol = cols;
     let minClaimRow = rows;
@@ -695,6 +737,11 @@ export class Game {
       },
       presentation: {
         rotatedPortrait: this.rotateForPortrait,
+      },
+      nitro: {
+        activeSeconds: Number(nitro.activeSeconds.toFixed(3)),
+        cooldownSeconds: Number(nitro.cooldownSeconds.toFixed(3)),
+        speedMultiplier: nitro.activeSeconds > 0 ? config.ignitionNitroMultiplier : 1,
       },
     };
     return JSON.stringify(payload, null, 2);
