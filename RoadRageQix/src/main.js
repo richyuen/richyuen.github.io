@@ -27,9 +27,20 @@ const disablePortraitRotation = portraitParam === "0";
 const coarsePointer = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0 || "ontouchstart" in window;
 const touchEnabled = forceTouchControls || coarsePointer;
 let portraitRotationEnabled = null;
+let fullscreenAvailable = Boolean(document.fullscreenEnabled && typeof document.documentElement?.requestFullscreen === "function");
 
 if (touchEnabled) {
   document.body.classList.add("touch-enabled");
+}
+game.setTouchMode(touchEnabled);
+
+function syncFullscreenButtonState() {
+  if (!touchFullscreenButton) {
+    return;
+  }
+  touchFullscreenButton.disabled = !fullscreenAvailable;
+  touchFullscreenButton.setAttribute("aria-disabled", String(!fullscreenAvailable));
+  touchFullscreenButton.textContent = fullscreenAvailable ? "Fullscreen" : "Fullscreen N/A";
 }
 
 function shouldRotatePortrait() {
@@ -54,14 +65,29 @@ function applyOrientationMode() {
 }
 
 function toggleFullscreen() {
+  if (!fullscreenAvailable) {
+    return;
+  }
   if (!document.fullscreenElement) {
     const shell = document.querySelector(".app-shell");
     if (shell && shell.requestFullscreen) {
-      shell.requestFullscreen().catch(() => {});
+      shell.requestFullscreen().catch(() => {
+        fullscreenAvailable = false;
+        syncFullscreenButtonState();
+      });
+      window.setTimeout(() => {
+        if (!document.fullscreenElement) {
+          fullscreenAvailable = false;
+          syncFullscreenButtonState();
+        }
+      }, 260);
     }
     return;
   }
-  document.exitFullscreen?.().catch(() => {});
+  document.exitFullscreen?.().catch(() => {
+    fullscreenAvailable = false;
+    syncFullscreenButtonState();
+  });
 }
 
 window.addEventListener("resize", () => {
@@ -70,6 +96,7 @@ window.addEventListener("resize", () => {
 });
 
 document.addEventListener("fullscreenchange", () => {
+  syncFullscreenButtonState();
   applyOrientationMode();
   game.resize();
 });
@@ -192,10 +219,6 @@ function setupTouchControls() {
     event.preventDefault();
   });
 
-  touchFullscreenButton?.addEventListener("pointerdown", (event) => {
-    toggleFullscreen();
-    event.preventDefault();
-  });
   touchFullscreenButton?.addEventListener("click", (event) => {
     toggleFullscreen();
     event.preventDefault();
@@ -215,6 +238,7 @@ function setupTouchControls() {
 }
 
 setupTouchControls();
+syncFullscreenButtonState();
 applyOrientationMode();
 
 startButton?.addEventListener("click", () => {

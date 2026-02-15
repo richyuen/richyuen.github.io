@@ -449,7 +449,7 @@ function drawCar(ctx, player, elapsedSeconds) {
   ctx.restore();
 }
 
-function drawHud(ctx, state, canvasWidth, config) {
+function drawHud(ctx, state, canvasWidth, config, touchMode) {
   const percent = Math.round(state.claimedPercent * 100);
   const nitro = state.nitro ?? { activeSeconds: 0, cooldownSeconds: 0 };
   const nitroReady = nitro.activeSeconds <= 0 && nitro.cooldownSeconds <= 0;
@@ -469,7 +469,9 @@ function drawHud(ctx, state, canvasWidth, config) {
   const nitroLabel = nitroActive
     ? `IGNITION ACTIVE ${nitro.activeSeconds.toFixed(1)}s`
     : nitroReady
-      ? "IGNITION READY (Space/Shift)"
+      ? touchMode
+        ? "IGNITION READY (Tap Ignition)"
+        : "IGNITION READY (Space/Shift)"
       : `IGNITION COOLING ${nitro.cooldownSeconds.toFixed(1)}s`;
   ctx.fillStyle = nitroActive ? "#ffd28f" : nitroReady ? "#ffb36f" : "rgba(245, 212, 165, 0.88)";
   ctx.font = '600 14px "Bahnschrift", "Segoe UI", sans-serif';
@@ -500,7 +502,7 @@ function drawHud(ctx, state, canvasWidth, config) {
   ctx.fillText("Wasteland Sector", canvasWidth - 170, 32);
 }
 
-function drawEndMessage(ctx, canvasWidth, canvasHeight, didWin) {
+function drawEndMessage(ctx, canvasWidth, canvasHeight, didWin, restartPrompt) {
   ctx.fillStyle = "rgba(8, 7, 6, 0.72)";
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
   ctx.textAlign = "center";
@@ -509,11 +511,11 @@ function drawEndMessage(ctx, canvasWidth, canvasHeight, didWin) {
   ctx.fillText(didWin ? "SECTOR SECURED" : "WRECKED OUT", canvasWidth / 2, canvasHeight / 2 - 18);
   ctx.fillStyle = "#f4dcc1";
   ctx.font = '500 22px "Bahnschrift", "Segoe UI", sans-serif';
-  ctx.fillText("Press Space to restart", canvasWidth / 2, canvasHeight / 2 + 30);
+  ctx.fillText(restartPrompt, canvasWidth / 2, canvasHeight / 2 + 30);
   ctx.textAlign = "left";
 }
 
-export function renderFrame(ctx, game) {
+export function renderWorld(ctx, game) {
   const {
     canvasWidth,
     canvasHeight,
@@ -550,12 +552,28 @@ export function renderFrame(ctx, game) {
   ctx.lineWidth = 2;
   ctx.strokeRect(0, 0, worldWidth, worldHeight);
   ctx.restore();
+}
 
-  drawHud(ctx, state, canvasWidth, config);
+export function renderOverlay(ctx, game) {
+  const {
+    canvasWidth,
+    canvasHeight,
+    touchMode,
+    state,
+    config,
+  } = game;
+  const restartPrompt = touchMode ? "Tap Ignition to restart" : "Press Space to restart";
+
+  drawHud(ctx, state, canvasWidth, config, touchMode);
 
   if (state.mode === "won") {
-    drawEndMessage(ctx, canvasWidth, canvasHeight, true);
+    drawEndMessage(ctx, canvasWidth, canvasHeight, true, restartPrompt);
   } else if (state.mode === "lost") {
-    drawEndMessage(ctx, canvasWidth, canvasHeight, false);
+    drawEndMessage(ctx, canvasWidth, canvasHeight, false, restartPrompt);
   }
+}
+
+export function renderFrame(ctx, game) {
+  renderWorld(ctx, game);
+  renderOverlay(ctx, game);
 }

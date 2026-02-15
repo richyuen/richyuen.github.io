@@ -1,6 +1,6 @@
 import { circleIntersectsMask, circleIntersectsSolid, clamp, cellToIndex, toCell } from "./collision.js";
 import { createEnemy, createPlayer, createSmoke, createSpark } from "./entities.js";
-import { renderFrame } from "./render.js";
+import { renderFrame, renderOverlay, renderWorld } from "./render.js";
 
 const config = {
   cell: 8,
@@ -139,6 +139,7 @@ export class Game {
     this.layoutWidth = this.canvasWidth;
     this.layoutHeight = this.canvasHeight;
     this.rotateForPortrait = false;
+    this.touchMode = false;
     this.canvas.width = this.canvasWidth;
     this.canvas.height = this.canvasHeight;
 
@@ -163,6 +164,10 @@ export class Game {
     }
     this.rotateForPortrait = next;
     this.resize();
+  }
+
+  setTouchMode(enabled) {
+    this.touchMode = Boolean(enabled);
   }
 
   createFreshState() {
@@ -658,13 +663,25 @@ export class Game {
       state: this.state,
       config,
     };
-    this.ctx.save();
     if (this.rotateForPortrait) {
+      this.ctx.save();
       this.ctx.translate(this.canvasWidth, 0);
       this.ctx.rotate(Math.PI / 2);
+      renderWorld(this.ctx, snapshot);
+      this.ctx.restore();
+      renderOverlay(this.ctx, {
+        ...snapshot,
+        touchMode: this.touchMode,
+        canvasWidth: this.canvasWidth,
+        canvasHeight: this.canvasHeight,
+      });
+      return;
     }
-    renderFrame(this.ctx, snapshot);
-    this.ctx.restore();
+
+    renderFrame(this.ctx, {
+      ...snapshot,
+      touchMode: this.touchMode,
+    });
   }
 
   renderToText() {
@@ -737,6 +754,7 @@ export class Game {
       },
       presentation: {
         rotatedPortrait: this.rotateForPortrait,
+        touchMode: this.touchMode,
       },
       nitro: {
         activeSeconds: Number(nitro.activeSeconds.toFixed(3)),

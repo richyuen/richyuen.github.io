@@ -184,3 +184,29 @@ Original prompt: Create a Javascript web-based area-fill game like Qix. Make it 
       - after switch to landscape -> `presentation.rotatedPortrait=false`
       - nitro active -> `nitro.speedMultiplier=1.85`, `nitro.activeSeconds>0`
     - Console error log: `output/portrait-nitro-check3/console-errors.json` (`[]`)
+
+## 2026-02-15 Portrait HUD orientation + touch instructions polish
+- Portrait HUD orientation update:
+  - Kept the world render rotated in portrait while rendering HUD/end overlays unrotated in screen space.
+  - Result: HUD now stays at the top in normal orientation during portrait gameplay.
+- Touch instruction updates:
+  - End-state restart prompt is now touch-aware:
+    - touch mode: `Tap Ignition to restart`
+    - non-touch mode: `Press Space to restart`
+  - HUD nitro-ready text is touch-aware in touch mode: `IGNITION READY (Tap Ignition)`.
+  - Menu instructions in `index.html` now explicitly describe touch ignition start/restart/boost behavior.
+- Fullscreen touch button resilience:
+  - Added capability-based button state sync (`Fullscreen` vs `Fullscreen N/A` and disabled state).
+  - Added graceful disable path when fullscreen request throws.
+  - Removed duplicate touch fullscreen toggle binding (`pointerdown` + `click`) to avoid double-toggle behavior.
+  - Raised `touch-controls` z-index above menu overlay so fullscreen button is tappable from the menu screen.
+- Validation:
+  - Skill Playwright client runs:
+    - `output/hud-top-portrait-client-final`
+    - `output/hud-top-portrait-client-final2`
+    - `output/hud-top-portrait-client-final3`
+  - Portrait touch screenshot with top-oriented HUD: `output/hud-top-portrait-check2/portrait-hud-top.png`.
+  - Fullscreen probe artifacts:
+    - pre-start probe (menu overlay intercept case): `output/fullscreen-button-check3/result.json`
+    - in-game touch fullscreen verification (`afterClick.hasFullscreenElement=true`): `output/fullscreen-button-check5/result.json`
+    - menu-screen touch fullscreen verification (`afterClick.fs=true`): `output/fullscreen-button-check6/result.json`
