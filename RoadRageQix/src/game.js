@@ -10,6 +10,8 @@ const config = {
   ignitionNitroDuration: 1.35,
   ignitionNitroMultiplier: 1.85,
   ignitionNitroCooldown: 3.4,
+  minSelectableEnemies: 1,
+  maxSelectableEnemies: 8,
   winClaimPercent: 0.75,
   playerInvulnSeconds: 1.2,
   enemySpeedMin: 165,
@@ -26,6 +28,29 @@ const interiorCellCount = (cols - 2) * (rows - 2);
 
 function randomRange(min, max) {
   return min + Math.random() * (max - min);
+}
+
+function clampSelectableEnemyCount(value) {
+  return Math.max(config.minSelectableEnemies, Math.min(config.maxSelectableEnemies, Math.floor(value)));
+}
+
+function buildEnemyWave(count) {
+  const safeCount = Math.max(1, Math.floor(count));
+  const enemies = [];
+  const centerX = config.worldWidth * 0.5;
+  const centerY = config.worldHeight * 0.5;
+  const ringRadius = Math.min(config.worldWidth, config.worldHeight) * 0.18;
+
+  for (let i = 0; i < safeCount; i += 1) {
+    const t = safeCount > 1 ? i / safeCount : 0;
+    const angle = t * Math.PI * 2 + randomRange(-0.18, 0.18);
+    const spread = safeCount > 1 ? ringRadius : 0;
+    const x = clamp(centerX + Math.cos(angle) * spread, config.cell * 4, config.worldWidth - config.cell * 4);
+    const y = clamp(centerY + Math.sin(angle) * spread, config.cell * 4, config.worldHeight - config.cell * 4);
+    enemies.push(createEnemy(x, y));
+  }
+
+  return enemies;
 }
 
 function forEachInterior(colsCount, rowsCount, fn) {
@@ -84,23 +109,30 @@ function findNearestOpenCell(claimed, originCol, originRow) {
   return null;
 }
 
-function floodFromEnemy(claimed, enemy) {
+function getEnemyOpenStartIndex(claimed, enemy) {
   const enemyCol = toCell(enemy.x, config.cell, cols - 1);
   const enemyRow = toCell(enemy.y, config.cell, rows - 1);
   let startIdx = cellToIndex(enemyCol, enemyRow, cols);
-
   if (claimed[startIdx]) {
     startIdx = findNearestOpenCell(claimed, enemyCol, enemyRow);
   }
-  if (startIdx === null) {
-    return new Uint8Array(cols * rows);
+  return startIdx;
+}
+
+function floodFromEnemies(claimed, enemies) {
+  const visited = new Uint8Array(cols * rows);
+  const queue = [];
+
+  for (const enemy of enemies) {
+    const startIdx = getEnemyOpenStartIndex(claimed, enemy);
+    if (startIdx === null || visited[startIdx]) {
+      continue;
+    }
+    visited[startIdx] = 1;
+    queue.push(startIdx);
   }
 
-  const visited = new Uint8Array(cols * rows);
-  const queue = [startIdx];
-  visited[startIdx] = 1;
   let head = 0;
-
   while (head < queue.length) {
     const idx = queue[head];
     head += 1;
@@ -125,6 +157,7 @@ function floodFromEnemy(claimed, enemy) {
       queue.push(nIdx);
     }
   }
+
   return visited;
 }
 
@@ -133,6 +166,10 @@ export class Game {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.menuOverlay = menuOverlay;
+    this.menuTitle = menuOverlay?.querySelector("#menu-title");
+    this.menuSubtitle = menuOverlay?.querySelector("#menu-subtitle");
+    this.menuStartButton = menuOverlay?.querySelector("#start-btn");
+    this.menuEnemyCount = menuOverlay?.querySelector("#enemy-count-value");
 
     this.canvasWidth = 1280;
     this.canvasHeight = 720;
@@ -152,7 +189,16 @@ export class Game {
     this.screenShake = 0;
     this.screenShakeTime = 0;
 
-    this.state = this.createFreshState();
+    this.selectedEnemyCount = config.minSelectableEnemies;
+    this.currentLevel = 1;
+    this.currentEnemyCount = this.selectedEnemyCount;
+
+    this.state = this.createFreshState({
+      enemyCount: this.currentEnemyCount,
+      lives: config.initialLives,
+      mode: "menu",
+      level: this.currentLevel,
+    });
     this.resize();
     this.syncMenuVisibility();
   }
@@ -170,13 +216,54 @@ export class Game {
     this.touchMode = Boolean(enabled);
   }
 
-  createFreshState() {
+  setStartingEnemyCount(nextCount) {
+    const clamped = clampSelectableEnemyCount(nextCount);
+    if (clamped === this.selectedEnemyCount) {
+      return this.selectedEnemyCount;
+    }
+    this.selectedEnemyCount = clamped;
+    this.updateMenuOverlayContent();
+    return this.selectedEnemyCount;
+  }
+
+  adjustStartingEnemyCount(delta) {
+    return this.setStartingEnemyCount(this.selectedEnemyCount + delta);
+  }
+
+  updateMenuOverlayContent() {
+    if (!this.menuOverlay) {
+      return;
+    }
+
+    const inDeathScreen = this.state.mode === "lost";
+    if (this.menuTitle) {
+      this.menuTitle.textContent = inDeathScreen ? "WRECKED OUT" : "ROAD RAGE: WASTELAND CLAIM";
+    }
+
+    if (this.menuSubtitle) {
+      this.menuSubtitle.textContent = inDeathScreen
+        ? `Run ended on level ${this.currentLevel}. Set a new starting enemy count and restart.`
+        : "Stake territory before the inferno spike-ball burns your trail.";
+    }
+
+    if (this.menuStartButton) {
+      this.menuStartButton.textContent = inDeathScreen ? "Restart Run" : "Start Engine";
+    }
+
+    if (this.menuEnemyCount) {
+      this.menuEnemyCount.textContent = String(this.selectedEnemyCount);
+    }
+  }
+
+  createFreshState({ enemyCount, lives, mode, level }) {
     const claimed = buildInitialClaimedMap();
     const player = createPlayer(config.worldWidth * 0.5, config.cell * 0.5);
-    const enemy = createEnemy(config.worldWidth * 0.5, config.worldHeight * 0.5);
+    const enemies = buildEnemyWave(enemyCount);
     return {
-      mode: "menu",
-      lives: config.initialLives,
+      mode,
+      level,
+      lives,
+      enemyCount: enemies.length,
       nitro: {
         activeSeconds: 0,
         cooldownSeconds: 0,
@@ -184,7 +271,7 @@ export class Game {
       claimed,
       claimedPercent: getClaimedPercent(claimed),
       player,
-      enemy,
+      enemies,
       sparks: [],
       smoke: [],
       trailMask: new Uint8Array(cols * rows),
@@ -218,17 +305,38 @@ export class Game {
     if (!this.menuOverlay) {
       return;
     }
-    this.menuOverlay.classList.toggle("hidden", this.state.mode !== "menu");
+    const showOverlay = this.state.mode === "menu" || this.state.mode === "lost";
+    this.menuOverlay.classList.toggle("hidden", !showOverlay);
+    this.updateMenuOverlayContent();
   }
 
   startGame() {
-    this.state = this.createFreshState();
-    this.state.mode = "playing";
+    this.currentLevel = 1;
+    this.currentEnemyCount = this.selectedEnemyCount;
+    this.state = this.createFreshState({
+      enemyCount: this.currentEnemyCount,
+      lives: config.initialLives,
+      mode: "playing",
+      level: this.currentLevel,
+    });
     this.syncMenuVisibility();
   }
 
   restartGame() {
     this.startGame();
+  }
+
+  advanceLevel() {
+    this.currentLevel += 1;
+    this.currentEnemyCount += 1;
+    const preservedLives = this.state.lives;
+    this.state = this.createFreshState({
+      enemyCount: this.currentEnemyCount,
+      lives: preservedLives,
+      mode: "playing",
+      level: this.currentLevel,
+    });
+    this.syncMenuVisibility();
   }
 
   loseLife() {
@@ -240,6 +348,7 @@ export class Game {
 
     if (this.state.lives <= 0) {
       this.state.mode = "lost";
+      this.syncMenuVisibility();
       return;
     }
 
@@ -256,13 +365,13 @@ export class Game {
     this.state.player.trailActive = false;
   }
 
-  normalizeEnemySpeed() {
-    const speed = Math.hypot(this.state.enemy.vx, this.state.enemy.vy);
+  normalizeEnemySpeed(enemy) {
+    const speed = Math.hypot(enemy.vx, enemy.vy);
     if (speed < config.enemySpeedMin || speed > config.enemySpeedMax) {
-      const angle = Math.atan2(this.state.enemy.vy, this.state.enemy.vx);
+      const angle = Math.atan2(enemy.vy, enemy.vx);
       const nextSpeed = clamp(speed, config.enemySpeedMin, config.enemySpeedMax);
-      this.state.enemy.vx = Math.cos(angle) * nextSpeed;
-      this.state.enemy.vy = Math.sin(angle) * nextSpeed;
+      enemy.vx = Math.cos(angle) * nextSpeed;
+      enemy.vy = Math.sin(angle) * nextSpeed;
     }
   }
 
@@ -277,8 +386,8 @@ export class Game {
       return;
     }
 
-    if (this.state.mode === "won" || this.state.mode === "lost") {
-      if (input.consume("Space")) {
+    if (this.state.mode === "lost") {
+      if (input.consume("Space") || input.consume("Enter")) {
         this.restartGame();
       }
       return;
@@ -286,7 +395,7 @@ export class Game {
 
     this.updateNitro(dt, input);
     this.updatePlayer(dt, input);
-    this.updateEnemy(dt);
+    this.updateEnemies(dt);
     this.updateSparks(dt);
     this.updateSmoke(dt);
     this.detectDamage();
@@ -413,7 +522,7 @@ export class Game {
     }
     this.state.trailCells.length = 0;
 
-    const reachable = floodFromEnemy(this.state.claimed, this.state.enemy);
+    const reachable = floodFromEnemies(this.state.claimed, this.state.enemies);
     forEachInterior(cols, rows, (col, row) => {
       const idx = cellToIndex(col, row, cols);
       if (!this.state.claimed[idx] && !reachable[idx]) {
@@ -423,104 +532,109 @@ export class Game {
 
     this.state.claimedPercent = getClaimedPercent(this.state.claimed);
 
-    const enemyCell = cellToIndex(
-      toCell(this.state.enemy.x, config.cell, cols - 1),
-      toCell(this.state.enemy.y, config.cell, rows - 1),
-      cols
-    );
-    if (this.state.claimed[enemyCell]) {
+    for (const enemy of this.state.enemies) {
+      const enemyCell = cellToIndex(
+        toCell(enemy.x, config.cell, cols - 1),
+        toCell(enemy.y, config.cell, rows - 1),
+        cols
+      );
+      if (!this.state.claimed[enemyCell]) {
+        continue;
+      }
       const open = findNearestOpenCell(
         this.state.claimed,
-        toCell(this.state.enemy.x, config.cell, cols - 1),
-        toCell(this.state.enemy.y, config.cell, rows - 1)
+        toCell(enemy.x, config.cell, cols - 1),
+        toCell(enemy.y, config.cell, rows - 1)
       );
-      if (open !== null) {
-        const col = open % cols;
-        const row = Math.floor(open / cols);
-        this.state.enemy.x = (col + 0.5) * config.cell;
-        this.state.enemy.y = (row + 0.5) * config.cell;
+      if (open === null) {
+        continue;
       }
+      const col = open % cols;
+      const row = Math.floor(open / cols);
+      enemy.x = (col + 0.5) * config.cell;
+      enemy.y = (row + 0.5) * config.cell;
     }
 
     if (this.state.claimedPercent >= config.winClaimPercent) {
-      this.state.mode = "won";
+      this.advanceLevel();
     }
   }
 
-  updateEnemy(dt) {
-    const enemy = this.state.enemy;
-    enemy.spin += dt * 2.2;
-    enemy.firePhase += dt * 4.5;
+  updateEnemies(dt) {
+    for (const enemy of this.state.enemies) {
+      enemy.spin += dt * 2.2;
+      enemy.firePhase += dt * 4.5;
 
-    let bouncedX = false;
-    let bouncedY = false;
+      let bouncedX = false;
+      let bouncedY = false;
 
-    const trialX = enemy.x + enemy.vx * dt;
-    if (circleIntersectsSolid(this.state.claimed, cols, rows, config.cell, trialX, enemy.y, enemy.radius)) {
-      enemy.vx *= -1;
-      bouncedX = true;
-    } else {
-      enemy.x = trialX;
-    }
-
-    const trialY = enemy.y + enemy.vy * dt;
-    if (circleIntersectsSolid(this.state.claimed, cols, rows, config.cell, enemy.x, trialY, enemy.radius)) {
-      enemy.vy *= -1;
-      bouncedY = true;
-    } else {
-      enemy.y = trialY;
-    }
-
-    if (bouncedX || bouncedY) {
-      const boost = randomRange(0.96, 1.05);
-      enemy.vx *= boost;
-      enemy.vy *= boost;
-      this.screenShake = 0.32;
-      this.screenShakeTime = Math.max(this.screenShakeTime, 0.08);
-    }
-
-    this.normalizeEnemySpeed();
-
-    enemy.sparkBudget += config.sparkSpawnRate * dt;
-    while (enemy.sparkBudget >= 1) {
-      enemy.sparkBudget -= 1;
-      if (this.state.sparks.length >= config.maxSparks) {
-        break;
+      const trialX = enemy.x + enemy.vx * dt;
+      if (circleIntersectsSolid(this.state.claimed, cols, rows, config.cell, trialX, enemy.y, enemy.radius)) {
+        enemy.vx *= -1;
+        bouncedX = true;
+      } else {
+        enemy.x = trialX;
       }
-      const travelAngle = Math.atan2(enemy.vy, enemy.vx);
-      const angle = travelAngle + Math.PI + (Math.random() - 0.5) * 1.5;
-      const distance = enemy.radius * (0.6 + Math.random() * 0.6);
-      this.state.sparks.push(
-        createSpark(
-          enemy.x + Math.cos(angle) * distance,
-          enemy.y + Math.sin(angle) * distance,
-          angle,
-          0.85 + Math.random() * 0.7
-        )
-      );
-    }
 
-    const speed = Math.hypot(enemy.vx, enemy.vy);
-    const speedRatio = clamp(speed / config.enemySpeedMax, 0.5, 1.25);
-    enemy.smokeBudget += config.smokeSpawnRate * dt * speedRatio;
-    while (enemy.smokeBudget >= 1) {
-      enemy.smokeBudget -= 1;
-      if (this.state.smoke.length >= config.maxSmoke) {
-        break;
+      const trialY = enemy.y + enemy.vy * dt;
+      if (circleIntersectsSolid(this.state.claimed, cols, rows, config.cell, enemy.x, trialY, enemy.radius)) {
+        enemy.vy *= -1;
+        bouncedY = true;
+      } else {
+        enemy.y = trialY;
       }
-      const travelAngle = Math.atan2(enemy.vy, enemy.vx);
-      const tailAngle = travelAngle + Math.PI + (Math.random() - 0.5) * 1.2;
-      const tailRadius = enemy.radius + 4 + Math.random() * 8;
-      const hotness = 0.65 + Math.random() * 0.45;
-      this.state.smoke.push(
-        createSmoke(
-          enemy.x + Math.cos(tailAngle) * tailRadius,
-          enemy.y + Math.sin(tailAngle) * tailRadius,
-          tailAngle,
-          0.65 + Math.random() * 0.6,
-          hotness
-        )
-      );
+
+      if (bouncedX || bouncedY) {
+        const boost = randomRange(0.96, 1.05);
+        enemy.vx *= boost;
+        enemy.vy *= boost;
+        this.screenShake = 0.32;
+        this.screenShakeTime = Math.max(this.screenShakeTime, 0.08);
+      }
+
+      this.normalizeEnemySpeed(enemy);
+
+      enemy.sparkBudget += config.sparkSpawnRate * dt;
+      while (enemy.sparkBudget >= 1) {
+        enemy.sparkBudget -= 1;
+        if (this.state.sparks.length >= config.maxSparks) {
+          break;
+        }
+        const travelAngle = Math.atan2(enemy.vy, enemy.vx);
+        const angle = travelAngle + Math.PI + (Math.random() - 0.5) * 1.5;
+        const distance = enemy.radius * (0.6 + Math.random() * 0.6);
+        this.state.sparks.push(
+          createSpark(
+            enemy.x + Math.cos(angle) * distance,
+            enemy.y + Math.sin(angle) * distance,
+            angle,
+            0.85 + Math.random() * 0.7
+          )
+        );
+      }
+
+      const speed = Math.hypot(enemy.vx, enemy.vy);
+      const speedRatio = clamp(speed / config.enemySpeedMax, 0.5, 1.25);
+      enemy.smokeBudget += config.smokeSpawnRate * dt * speedRatio;
+      while (enemy.smokeBudget >= 1) {
+        enemy.smokeBudget -= 1;
+        if (this.state.smoke.length >= config.maxSmoke) {
+          break;
+        }
+        const travelAngle = Math.atan2(enemy.vy, enemy.vx);
+        const tailAngle = travelAngle + Math.PI + (Math.random() - 0.5) * 1.2;
+        const tailRadius = enemy.radius + 4 + Math.random() * 8;
+        const hotness = 0.65 + Math.random() * 0.45;
+        this.state.smoke.push(
+          createSmoke(
+            enemy.x + Math.cos(tailAngle) * tailRadius,
+            enemy.y + Math.sin(tailAngle) * tailRadius,
+            tailAngle,
+            0.65 + Math.random() * 0.6,
+            hotness
+          )
+        );
+      }
     }
   }
 
@@ -629,21 +743,26 @@ export class Game {
       return;
     }
 
-    const { enemy, player, trailMask } = this.state;
+    const { enemies, player, trailMask } = this.state;
 
     if (player.invuln <= 0) {
-      const dx = enemy.x - player.x;
-      const dy = enemy.y - player.y;
-      const minDist = enemy.radius + player.radius;
-      if (dx * dx + dy * dy <= minDist * minDist) {
-        this.loseLife();
-        return;
+      for (const enemy of enemies) {
+        const dx = enemy.x - player.x;
+        const dy = enemy.y - player.y;
+        const minDist = enemy.radius + player.radius;
+        if (dx * dx + dy * dy <= minDist * minDist) {
+          this.loseLife();
+          return;
+        }
       }
     }
 
     if (player.trailActive) {
-      if (circleIntersectsMask(trailMask, cols, rows, config.cell, enemy.x, enemy.y, enemy.radius)) {
-        this.loseLife();
+      for (const enemy of enemies) {
+        if (circleIntersectsMask(trailMask, cols, rows, config.cell, enemy.x, enemy.y, enemy.radius)) {
+          this.loseLife();
+          return;
+        }
       }
     }
   }
@@ -685,7 +804,7 @@ export class Game {
   }
 
   renderToText() {
-    const { player, enemy, mode, sparks, smoke, lives, claimedPercent, trailCells, nitro } = this.state;
+    const { player, enemies, mode, sparks, smoke, lives, claimedPercent, trailCells, nitro, level, enemyCount } = this.state;
     let claimedCells = 0;
     let minClaimCol = cols;
     let minClaimRow = rows;
@@ -727,13 +846,28 @@ export class Game {
         trailActive: player.trailActive,
         invuln: Number(player.invuln.toFixed(3)),
       },
-      enemy: {
+      level: {
+        number: level,
+        activeEnemyCount: enemyCount,
+        selectedStartingEnemyCount: this.selectedEnemyCount,
+      },
+      enemies: enemies.map((enemy) => ({
         x: Number(enemy.x.toFixed(2)),
         y: Number(enemy.y.toFixed(2)),
         vx: Number(enemy.vx.toFixed(2)),
         vy: Number(enemy.vy.toFixed(2)),
         radius: enemy.radius,
-      },
+      })),
+      enemy:
+        enemies.length > 0
+          ? {
+              x: Number(enemies[0].x.toFixed(2)),
+              y: Number(enemies[0].y.toFixed(2)),
+              vx: Number(enemies[0].vx.toFixed(2)),
+              vy: Number(enemies[0].vy.toFixed(2)),
+              radius: enemies[0].radius,
+            }
+          : null,
       territory: {
         claimedPercent: Number(claimedPercent.toFixed(4)),
         claimedInteriorCells: claimedCells,

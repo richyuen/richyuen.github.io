@@ -24,6 +24,8 @@ RoadRageQix control snapshot:
 - Movement: `WASD` or arrow keys.
 - Ignition nitro (temporary speed burst): `Space` or `Shift`.
 - Touch Ignition button: start/restart outside gameplay, nitro during gameplay.
+- Menu/death setup: adjust starting enemy count with `Left/Right` or `+/-` selector buttons.
+- Victory flow: automatically advances to next level with one additional enemy.
 
 ## Local Development
 

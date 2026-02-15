@@ -82,6 +82,50 @@ body {
   color: #f0cf9f;
 }
 
+.enemy-select {
+  margin: 0 auto;
+  display: grid;
+  gap: 0.45rem;
+  justify-items: center;
+  background: rgba(25, 20, 15, 0.62);
+  border: 1px solid rgba(255, 177, 91, 0.3);
+  padding: 0.65rem 0.9rem;
+}
+
+.enemy-select-label {
+  color: #f6d6a7;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+}
+
+.enemy-select-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.enemy-select-btn {
+  border: 1px solid rgba(255, 191, 122, 0.8);
+  background: linear-gradient(180deg, rgba(214, 120, 58, 0.95), rgba(92, 44, 21, 0.96));
+  color: #fff3de;
+  font-family: "Impact", "Haettenschweiler", "Arial Black", sans-serif;
+  font-size: 1.05rem;
+  width: 2rem;
+  height: 2rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.enemy-count-value {
+  min-width: 2.2rem;
+  text-align: center;
+  color: #ffd9ac;
+  font-family: "Impact", "Haettenschweiler", "Arial Black", sans-serif;
+  font-size: 1.1rem;
+}
+
 .overlay ul {
   margin: 0 auto;
   text-align: left;

@@ -210,3 +210,38 @@ Original prompt: Create a Javascript web-based area-fill game like Qix. Make it 
     - pre-start probe (menu overlay intercept case): `output/fullscreen-button-check3/result.json`
     - in-game touch fullscreen verification (`afterClick.hasFullscreenElement=true`): `output/fullscreen-button-check5/result.json`
     - menu-screen touch fullscreen verification (`afterClick.fs=true`): `output/fullscreen-button-check6/result.json`
+
+## 2026-02-15 Enemy count selector + level progression pass
+- Added starting-enemy selector to menu overlay:
+  - New `-` / `+` selector controls in `index.html`.
+  - Keyboard support in menu/death screens: `Left`/`Right` (also `A`/`D`) adjusts starting enemy count.
+  - Selector remains available on death page (lost state) before restarting.
+- Refactored game state for multi-enemy rounds:
+  - Replaced single `enemy` runtime model with `enemies[]` plus `level` and `enemyCount` metadata.
+  - Updated enemy simulation, collision checks, claim flood-fill source logic, and rendering to handle all active enemies.
+- Added level progression behavior:
+  - Reaching claim target no longer pauses on a win page.
+  - Instead, the game advances to the next level immediately and spawns one additional enemy.
+  - Lives are preserved across level progression.
+- Updated HUD and text-state output:
+  - HUD now shows `Level` and active `Enemies`.
+  - `render_game_to_text()` now reports `level.number`, `level.activeEnemyCount`, `level.selectedStartingEnemyCount`, and full `enemies[]`.
+- Documentation sync:
+  - Updated `README.md`, `AGENTS.md`, and `RoadRageQix/README.md` for selector controls and level progression.
+- Validation:
+  - Skill Playwright client runs:
+    - `output/enemy-level-client`
+    - `output/enemy-level-client-rerun`
+    - `output/enemy-level-client-final`
+  - Menu/death selector + restart verification:
+    - `output/enemy-level-check-final/result.json`
+    - Verified:
+      - menu selection set to 3 -> run starts with 3 enemies
+      - after death, selection changed to 2 -> restart run starts with 2 enemies
+  - Level progression (+1 enemy) verification via deterministic scripted cuts:
+    - `output/enemy-level-up-hunt/result.json`
+    - Verified transition:
+      - level 1 with 1 enemy -> level 2 with 2 enemies after crossing 75% claim target
+  - Additional artifacts:
+    - `output/enemy-level-check-final/final-shot.png`
+    - `output/enemy-level-up-hunt/final.png`

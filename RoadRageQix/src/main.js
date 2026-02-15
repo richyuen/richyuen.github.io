@@ -4,6 +4,8 @@ import { InputController } from "./input.js";
 const canvas = document.getElementById("game-canvas");
 const menuOverlay = document.getElementById("menu-overlay");
 const startButton = document.getElementById("start-btn");
+const enemyMinusButton = document.getElementById("enemy-minus-btn");
+const enemyPlusButton = document.getElementById("enemy-plus-btn");
 const touchPad = document.getElementById("touch-pad");
 const touchPadKnob = document.getElementById("touch-pad-knob");
 const touchRestartButton = document.getElementById("touch-restart");
@@ -90,6 +92,22 @@ function toggleFullscreen() {
   });
 }
 
+function inSetupScreen() {
+  return game.state.mode === "menu" || game.state.mode === "lost";
+}
+
+function triggerPrimaryAction() {
+  if (game.state.mode === "menu") {
+    game.startGame();
+    input.flush();
+    return;
+  }
+  if (game.state.mode === "lost") {
+    game.restartGame();
+    input.flush();
+  }
+}
+
 window.addEventListener("resize", () => {
   applyOrientationMode();
   game.resize();
@@ -119,21 +137,24 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
 
-  if (game.state.mode === "menu" && (event.code === "Enter" || event.code === "Space")) {
+  if (inSetupScreen() && (event.code === "ArrowLeft" || event.code === "KeyA")) {
     event.preventDefault();
-    game.startGame();
-    input.flush();
+    game.adjustStartingEnemyCount(-1);
+  }
+
+  if (inSetupScreen() && (event.code === "ArrowRight" || event.code === "KeyD")) {
+    event.preventDefault();
+    game.adjustStartingEnemyCount(1);
+  }
+
+  if (inSetupScreen() && (event.code === "Enter" || event.code === "Space")) {
+    event.preventDefault();
+    triggerPrimaryAction();
   }
 });
 
 function triggerTouchAction() {
-  if (game.state.mode === "menu") {
-    game.startGame();
-    return;
-  }
-  if (game.state.mode === "won" || game.state.mode === "lost") {
-    game.restartGame();
-  }
+  triggerPrimaryAction();
 }
 
 function setupTouchControls() {
@@ -226,7 +247,7 @@ function setupTouchControls() {
 
   canvas?.addEventListener("pointerdown", (event) => {
     if (game.state.mode === "menu") {
-      game.startGame();
+      triggerPrimaryAction();
       event.preventDefault();
     }
   });
@@ -242,7 +263,19 @@ syncFullscreenButtonState();
 applyOrientationMode();
 
 startButton?.addEventListener("click", () => {
-  game.startGame();
+  triggerPrimaryAction();
+});
+
+enemyMinusButton?.addEventListener("click", () => {
+  if (inSetupScreen()) {
+    game.adjustStartingEnemyCount(-1);
+  }
+});
+
+enemyPlusButton?.addEventListener("click", () => {
+  if (inSetupScreen()) {
+    game.adjustStartingEnemyCount(1);
+  }
 });
 
 function runFixedUpdate(stepCount) {

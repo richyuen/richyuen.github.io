@@ -20,14 +20,24 @@
         </div>
       </section>
       <section id="menu-overlay" class="overlay">
-        <h1>ROAD RAGE: WASTELAND CLAIM</h1>
-        <p>Stake territory before the inferno spike-ball burns your trail.</p>
+        <h1 id="menu-title">ROAD RAGE: WASTELAND CLAIM</h1>
+        <p id="menu-subtitle">Stake territory before the inferno spike-ball burns your trail.</p>
+        <div class="enemy-select" role="group" aria-label="Starting enemies selector">
+          <span class="enemy-select-label">Starting enemies</span>
+          <div class="enemy-select-controls">
+            <button id="enemy-minus-btn" type="button" class="enemy-select-btn" aria-label="Decrease starting enemies">-</button>
+            <span id="enemy-count-value" class="enemy-count-value" aria-live="polite">1</span>
+            <button id="enemy-plus-btn" type="button" class="enemy-select-btn" aria-label="Increase starting enemies">+</button>
+          </div>
+        </div>
         <ul>
           <li>Move: WASD or Arrow Keys</li>
           <li>Ignition Nitro: Space or Shift (touch Ignition while driving)</li>
           <li>Touch: steer with left joystick; tap Ignition to start/restart or boost while driving</li>
+          <li>Menu/death page: use Left/Right (or +/- buttons) to set starting enemy count</li>
           <li>Draw a trail through open territory and reconnect to walls</li>
           <li>Win at 75% claim, avoid contact with active trail and chassis</li>
+          <li>Victory auto-advances to the next level with one extra enemy</li>
           <li>Press F for fullscreen, Esc to exit fullscreen</li>
         </ul>
         <button id="start-btn" type="button">Start Engine</button>

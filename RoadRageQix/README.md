@@ -18,6 +18,7 @@ Arcade territory-claiming game inspired by Qix, implemented as a modular HTML5 c
 
 - Keyboard movement: `WASD` or arrow keys.
 - Start in menu: `Enter` or `Space` (or click/tap Start button).
+- Menu/death setup: `Left`/`Right` (or `-`/`+` selector buttons) adjusts starting enemy count.
 - Ignition nitro burst while playing: `Space` or `Shift`.
 - Restart after win/loss: `Space` (or touch Ignition button).
 - Fullscreen: `F` to toggle, `Esc` to exit.
@@ -36,7 +37,8 @@ Arcade territory-claiming game inspired by Qix, implemented as a modular HTML5 c
 - Enemy touching player or active trail costs a life.
 - Sparks are visual only (non-damaging) but collide with claimed walls.
 - Ignition nitro gives a temporary speed boost, then cooldown.
-- Win at `75%` claimed territory.
+- Win target is `75%` claimed territory, then the run advances to the next level automatically.
+- Each new level adds one enemy compared to the previous level.
 
 ## Orientation and Query Overrides
 

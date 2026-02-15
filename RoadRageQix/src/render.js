@@ -454,17 +454,21 @@ function drawHud(ctx, state, canvasWidth, config, touchMode) {
   const nitro = state.nitro ?? { activeSeconds: 0, cooldownSeconds: 0 };
   const nitroReady = nitro.activeSeconds <= 0 && nitro.cooldownSeconds <= 0;
   const nitroActive = nitro.activeSeconds > 0;
+  const level = state.level ?? 1;
+  const enemyCount = state.enemyCount ?? (state.enemies?.length ?? 1);
 
   ctx.fillStyle = "rgba(12, 9, 7, 0.62)";
-  ctx.fillRect(18, 14, 380, 116);
+  ctx.fillRect(18, 14, 390, 136);
   ctx.strokeStyle = "rgba(255, 194, 128, 0.5)";
   ctx.lineWidth = 1;
-  ctx.strokeRect(18, 14, 380, 116);
+  ctx.strokeRect(18, 14, 390, 136);
 
   ctx.fillStyle = "#f5d4a5";
   ctx.font = '600 20px "Bahnschrift", "Segoe UI", sans-serif';
   ctx.fillText(`Territory: ${percent}% / 75%`, 34, 46);
   ctx.fillText(`Lives: ${state.lives}`, 34, 74);
+  ctx.font = '600 16px "Bahnschrift", "Segoe UI", sans-serif';
+  ctx.fillText(`Level: ${level}  Enemies: ${enemyCount}`, 34, 95);
 
   const nitroLabel = nitroActive
     ? `IGNITION ACTIVE ${nitro.activeSeconds.toFixed(1)}s`
@@ -475,10 +479,10 @@ function drawHud(ctx, state, canvasWidth, config, touchMode) {
       : `IGNITION COOLING ${nitro.cooldownSeconds.toFixed(1)}s`;
   ctx.fillStyle = nitroActive ? "#ffd28f" : nitroReady ? "#ffb36f" : "rgba(245, 212, 165, 0.88)";
   ctx.font = '600 14px "Bahnschrift", "Segoe UI", sans-serif';
-  ctx.fillText(nitroLabel, 34, 97);
+  ctx.fillText(nitroLabel, 34, 115);
 
   const barX = 34;
-  const barY = 104;
+  const barY = 122;
   const barWidth = 260;
   const barHeight = 9;
   let fill = 1;
@@ -544,7 +548,10 @@ export function renderWorld(ctx, game) {
   drawTrail(ctx, state, config, elapsedSeconds);
   drawSmoke(ctx, state.smoke, elapsedSeconds);
   drawSparks(ctx, state.sparks, elapsedSeconds);
-  drawEnemy(ctx, state.enemy, elapsedSeconds);
+  const enemies = state.enemies ?? (state.enemy ? [state.enemy] : []);
+  for (const enemy of enemies) {
+    drawEnemy(ctx, enemy, elapsedSeconds);
+  }
   drawClaimEdges(ctx, state, config);
   drawCar(ctx, state.player, elapsedSeconds);
 

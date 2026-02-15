@@ -49,6 +49,8 @@ Current gameplay controls to preserve unless asked otherwise:
 - Move: `WASD` / arrow keys.
 - Ignition nitro: `Space` or `Shift` while playing.
 - Touch Ignition button: start/restart in menu/end states, nitro during gameplay.
+- Menu/death setup: `Left/Right` keys or selector buttons adjust starting enemy count.
+- Victory progression: reaching claim target advances to next level with +1 enemy.
 
 Keep deterministic test hooks intact unless explicitly asked to remove/rename:
 
