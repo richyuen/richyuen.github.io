@@ -52,7 +52,7 @@ body {
 .overlay {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 6;
   display: grid;
   place-content: center;
   gap: 0.8rem;
@@ -262,6 +262,49 @@ body {
 }
 
 @media (max-width: 860px) {
+  .app-shell {
+    width: 100vw;
+    height: 100vh;
+    border: none;
+    top: 0;
+    transform: none;
+  }
+
+  .overlay {
+    place-content: start center;
+    align-content: start;
+    padding: 0.9rem 0.8rem 1.1rem;
+    gap: 0.65rem;
+    overflow-y: auto;
+  }
+
+  .overlay h1 {
+    font-size: clamp(1.15rem, 5.8vw, 1.65rem);
+    line-height: 1.1;
+  }
+
+  .overlay p {
+    font-size: 0.9rem;
+    max-width: 38ch;
+    margin: 0 auto;
+  }
+
+  .overlay ul {
+    max-width: min(95vw, 580px);
+    font-size: 0.85rem;
+    line-height: 1.28;
+    padding: 0.7rem 0.85rem;
+  }
+
+  .overlay li {
+    margin: 0.12rem 0;
+  }
+
+  #start-btn {
+    width: min(86vw, 320px);
+    padding: 0.65rem 1rem;
+  }
+
   .touch-pad {
     width: 156px;
     height: 156px;
@@ -285,6 +328,17 @@ body {
     min-width: 110px;
     font-size: 0.8rem;
     padding: 0.5rem 0.75rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .overlay {
+    padding-top: 0.75rem;
+    gap: 0.55rem;
+  }
+
+  .overlay ul {
+    font-size: 0.8rem;
   }
 }
 
