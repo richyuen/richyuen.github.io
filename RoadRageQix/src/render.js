@@ -1,8 +1,9 @@
 import { POWERUP_TYPES } from "./powerups.js";
 
-// Reusable spark gradient cache (avoids per-spark gradient creation)
-let sparkGradientCanvas = null;
-let sparkGradientCtx = null;
+// Module-level terrain cache
+let cachedTerrainCanvas = null;
+let cachedEdgeCanvas = null;
+let terrainCacheVersion = -1;
 
 function drawDustBackground(ctx, width, height, elapsedSeconds) {
   const gradient = ctx.createLinearGradient(0, 0, 0, height);
@@ -828,13 +829,15 @@ export function renderWorld(ctx, game) {
   drawGridGlow(ctx, worldWidth, worldHeight, config.cell);
 
   // Cached terrain rendering
-  if (game.terrainCacheDirty || !game.terrainCanvas) {
+  const cacheVersion = game.terrainCacheVersion ?? 0;
+  if (cacheVersion !== terrainCacheVersion || !cachedTerrainCanvas) {
     const cached = renderTerrainToCache(state, config, highContrastMode);
-    game.terrainCanvas = cached.terrainCanvas;
-    game.edgeCanvas = cached.edgeCanvas;
+    cachedTerrainCanvas = cached.terrainCanvas;
+    cachedEdgeCanvas = cached.edgeCanvas;
+    terrainCacheVersion = cacheVersion;
   }
-  if (game.terrainCanvas) {
-    ctx.drawImage(game.terrainCanvas, 0, 0);
+  if (cachedTerrainCanvas) {
+    ctx.drawImage(cachedTerrainCanvas, 0, 0);
   }
 
   drawTrail(ctx, state, config, elapsedSeconds, trailDanger || 0, highContrastMode);
@@ -848,10 +851,10 @@ export function renderWorld(ctx, game) {
   }
 
   // Edges from cache
-  if (game.edgeCanvas) {
+  if (cachedEdgeCanvas) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    ctx.drawImage(game.edgeCanvas, 0, 0);
+    ctx.drawImage(cachedEdgeCanvas, 0, 0);
     ctx.restore();
   }
 
