@@ -22,8 +22,8 @@ export const config = {
   maxSparks: 760,
   smokeSpawnRate: 32,
   maxSmoke: 320,
-  powerupSpawnInterval: 8,
-  maxPowerups: 3,
+  powerupSpawnInterval: 5,
+  maxPowerups: 4,
 };
 
 const cols = Math.floor(config.worldWidth / config.cell);
@@ -379,7 +379,7 @@ export class Game {
       trailCells: [],
       powerups: [],
       activePowerups: [],
-      powerupSpawnTimer: config.powerupSpawnInterval * 0.5,
+      powerupSpawnTimer: 0.5,
     };
   }
 
@@ -782,7 +782,7 @@ export class Game {
     // Spawn timer
     st.powerupSpawnTimer -= dt;
     if (st.powerupSpawnTimer <= 0 && st.powerups.length < config.maxPowerups) {
-      st.powerupSpawnTimer = config.powerupSpawnInterval + Math.random() * 3;
+      st.powerupSpawnTimer = config.powerupSpawnInterval + Math.random() * 2;
       const pu = createPowerup(config.worldWidth, config.worldHeight, config.cell, st.claimed, cols);
       if (pu) {
         st.powerups.push(pu);

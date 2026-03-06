@@ -539,24 +539,24 @@ function drawPowerups(ctx, powerups, elapsedSeconds) {
     // Glow
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = 0.3 + Math.sin(pu.pulse) * 0.1;
+    ctx.globalAlpha = 0.45 + Math.sin(pu.pulse) * 0.15;
     ctx.fillStyle = def.color;
     ctx.beginPath();
-    ctx.arc(pu.x, pu.y, r * 2, 0, Math.PI * 2);
+    ctx.arc(pu.x, pu.y, r * 2.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
     // Body
     ctx.save();
     ctx.fillStyle = def.color;
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 1;
     ctx.beginPath();
     ctx.arc(pu.x, pu.y, r, 0, Math.PI * 2);
     ctx.fill();
 
     // Icon
     ctx.fillStyle = "#fff";
-    ctx.font = `bold ${Math.round(r)}px "Impact", sans-serif`;
+    ctx.font = `bold ${Math.round(r * 1.2)}px "Impact", sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(def.icon, pu.x, pu.y + 1);
