@@ -1,5 +1,6 @@
 import { Game } from "./game.js";
 import { InputController } from "./input.js";
+import { ensureAudioResumed } from "./audio.js";
 
 const canvas = document.getElementById("game-canvas");
 const menuOverlay = document.getElementById("menu-overlay");
@@ -97,6 +98,7 @@ function inSetupScreen() {
 }
 
 function triggerPrimaryAction() {
+  ensureAudioResumed();
   if (game.state.mode === "menu") {
     game.startGame();
     input.flush();
@@ -131,10 +133,16 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.code === "Escape" && document.fullscreenElement) {
     document.exitFullscreen?.().catch(() => {});
+    // Consume the Escape so it doesn't also trigger pause
+    input.consume("Escape");
   }
 
   if (game.state.mode === "playing" && event.code === "Space") {
     event.preventDefault();
+  }
+
+  if (event.code === "KeyH") {
+    game.toggleHighContrast();
   }
 
   if (inSetupScreen() && (event.code === "ArrowLeft" || event.code === "KeyA")) {
