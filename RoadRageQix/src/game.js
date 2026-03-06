@@ -1,8 +1,10 @@
 import { circleIntersectsMask, circleIntersectsSolid, clamp, cellToIndex, toCell } from "./collision.js";
 import { createEnemy, createPlayer, createSmoke, createSpark } from "./entities.js";
 import { renderFrame, renderOverlay, renderWorld } from "./render.js";
+import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./powerups.js";
+import * as audio from "./audio.js";
 
-const config = {
+export const config = {
   cell: 8,
   worldWidth: 960,
   worldHeight: 640,
@@ -20,11 +22,16 @@ const config = {
   maxSparks: 760,
   smokeSpawnRate: 32,
   maxSmoke: 320,
+  powerupSpawnInterval: 8,
+  maxPowerups: 3,
 };
 
 const cols = Math.floor(config.worldWidth / config.cell);
 const rows = Math.floor(config.worldHeight / config.cell);
 const interiorCellCount = (cols - 2) * (rows - 2);
+
+// Reusable flood-fill buffer to reduce GC pressure
+const floodBuffer = new Uint8Array(cols * rows);
 
 function randomRange(min, max) {
   return min + Math.random() * (max - min);
@@ -34,7 +41,27 @@ function clampSelectableEnemyCount(value) {
   return Math.max(config.minSelectableEnemies, Math.min(config.maxSelectableEnemies, Math.floor(value)));
 }
 
-function buildEnemyWave(count) {
+/** Enemy variant types for higher levels */
+const ENEMY_VARIANTS = {
+  normal: { radiusMul: 1, speedMul: 1, spikeCount: 14, color: null },
+  fast: { radiusMul: 0.7, speedMul: 1.4, spikeCount: 10, color: "#44ddff" },
+  tracker: { radiusMul: 0.85, speedMul: 1.0, spikeCount: 12, color: "#ff44cc" },
+  charger: { radiusMul: 1.15, speedMul: 0.9, spikeCount: 18, color: "#ff3333" },
+};
+
+function pickEnemyVariant(level, index) {
+  if (level < 3) return "normal";
+  if (level < 5) {
+    return index > 0 && Math.random() < 0.35 ? "fast" : "normal";
+  }
+  const roll = Math.random();
+  if (roll < 0.25) return "fast";
+  if (roll < 0.45) return "tracker";
+  if (roll < 0.6) return "charger";
+  return "normal";
+}
+
+function buildEnemyWave(count, level) {
   const safeCount = Math.max(1, Math.floor(count));
   const enemies = [];
   const centerX = config.worldWidth * 0.5;
@@ -47,7 +74,24 @@ function buildEnemyWave(count) {
     const spread = safeCount > 1 ? ringRadius : 0;
     const x = clamp(centerX + Math.cos(angle) * spread, config.cell * 4, config.worldWidth - config.cell * 4);
     const y = clamp(centerY + Math.sin(angle) * spread, config.cell * 4, config.worldHeight - config.cell * 4);
-    enemies.push(createEnemy(x, y));
+    const variant = pickEnemyVariant(level, i);
+    const def = ENEMY_VARIANTS[variant];
+    const enemy = createEnemy(x, y);
+    enemy.variant = variant;
+    enemy.radius = Math.round(enemy.radius * def.radiusMul);
+    enemy.spikeCount = def.spikeCount;
+    enemy.variantColor = def.color;
+    const speed = Math.hypot(enemy.vx, enemy.vy) * def.speedMul;
+    const a = Math.atan2(enemy.vy, enemy.vx);
+    enemy.vx = Math.cos(a) * speed;
+    enemy.vy = Math.sin(a) * speed;
+    // Charger state
+    if (variant === "charger") {
+      enemy.chargeTimer = 3 + Math.random() * 2;
+      enemy.charging = false;
+      enemy.chargeTimeLeft = 0;
+    }
+    enemies.push(enemy);
   }
 
   return enemies;
@@ -120,15 +164,15 @@ function getEnemyOpenStartIndex(claimed, enemy) {
 }
 
 function floodFromEnemies(claimed, enemies) {
-  const visited = new Uint8Array(cols * rows);
+  floodBuffer.fill(0);
   const queue = [];
 
   for (const enemy of enemies) {
     const startIdx = getEnemyOpenStartIndex(claimed, enemy);
-    if (startIdx === null || visited[startIdx]) {
+    if (startIdx === null || floodBuffer[startIdx]) {
       continue;
     }
-    visited[startIdx] = 1;
+    floodBuffer[startIdx] = 1;
     queue.push(startIdx);
   }
 
@@ -150,15 +194,32 @@ function floodFromEnemies(claimed, enemies) {
         continue;
       }
       const nIdx = cellToIndex(nc, nr, cols);
-      if (visited[nIdx] || claimed[nIdx]) {
+      if (floodBuffer[nIdx] || claimed[nIdx]) {
         continue;
       }
-      visited[nIdx] = 1;
+      floodBuffer[nIdx] = 1;
       queue.push(nIdx);
     }
   }
 
-  return visited;
+  return floodBuffer;
+}
+
+/** Score helpers */
+const SCORE_STORAGE_KEY = "roadrageqix_highscore";
+
+function loadHighScore() {
+  try {
+    return parseInt(localStorage.getItem(SCORE_STORAGE_KEY), 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveHighScore(score) {
+  try {
+    localStorage.setItem(SCORE_STORAGE_KEY, String(score));
+  } catch {}
 }
 
 export class Game {
@@ -189,9 +250,37 @@ export class Game {
     this.screenShake = 0;
     this.screenShakeTime = 0;
 
+    // Damage flash
+    this.damageFlash = 0;
+
+    // Score
+    this.score = 0;
+    this.highScore = loadHighScore();
+    this.scoreMultiplier = 1;
+    this.comboCount = 0;
+
+    // Claim animation
+    this.claimFlashCells = [];
+    this.claimFlashTime = 0;
+
+    // Pause
+    this.paused = false;
+
+    // Tutorial
+    this.tutorialShown = false;
+    this.tutorialTime = 0;
+
+    // Terrain cache
+    this.terrainCacheDirty = true;
+    this.terrainCanvas = null;
+    this.edgeCanvas = null;
+
     this.selectedEnemyCount = config.minSelectableEnemies;
     this.currentLevel = 1;
     this.currentEnemyCount = this.selectedEnemyCount;
+
+    // Colorblind mode
+    this.highContrastMode = false;
 
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
@@ -214,6 +303,18 @@ export class Game {
 
   setTouchMode(enabled) {
     this.touchMode = Boolean(enabled);
+  }
+
+  toggleHighContrast() {
+    this.highContrastMode = !this.highContrastMode;
+    this.terrainCacheDirty = true;
+    return this.highContrastMode;
+  }
+
+  togglePause() {
+    if (this.state.mode !== "playing") return false;
+    this.paused = !this.paused;
+    return this.paused;
   }
 
   setStartingEnemyCount(nextCount) {
@@ -242,7 +343,7 @@ export class Game {
 
     if (this.menuSubtitle) {
       this.menuSubtitle.textContent = inDeathScreen
-        ? `Run ended on level ${this.currentLevel}. Set a new starting enemy count and restart.`
+        ? `Run ended on level ${this.currentLevel}. Score: ${this.score} | High: ${this.highScore}`
         : "Stake territory before the inferno spike-ball burns your trail.";
     }
 
@@ -258,7 +359,7 @@ export class Game {
   createFreshState({ enemyCount, lives, mode, level }) {
     const claimed = buildInitialClaimedMap();
     const player = createPlayer(config.worldWidth * 0.5, config.cell * 0.5);
-    const enemies = buildEnemyWave(enemyCount);
+    const enemies = buildEnemyWave(enemyCount, level);
     return {
       mode,
       level,
@@ -276,6 +377,9 @@ export class Game {
       smoke: [],
       trailMask: new Uint8Array(cols * rows),
       trailCells: [],
+      powerups: [],
+      activePowerups: [],
+      powerupSpawnTimer: config.powerupSpawnInterval * 0.5,
     };
   }
 
@@ -299,6 +403,9 @@ export class Game {
     );
     this.worldOffsetX = (this.layoutWidth - this.worldWidth * this.viewScale) * 0.5;
     this.worldOffsetY = (this.layoutHeight - this.worldHeight * this.viewScale) * 0.5;
+
+    // Invalidate terrain cache on resize
+    this.terrainCacheDirty = true;
   }
 
   syncMenuVisibility() {
@@ -311,8 +418,18 @@ export class Game {
   }
 
   startGame() {
+    audio.ensureAudioResumed();
+    audio.startAmbient();
+    audio.startEngine();
     this.currentLevel = 1;
     this.currentEnemyCount = this.selectedEnemyCount;
+    this.score = 0;
+    this.comboCount = 0;
+    this.scoreMultiplier = 1;
+    this.paused = false;
+    this.tutorialShown = false;
+    this.tutorialTime = 0;
+    this.terrainCacheDirty = true;
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
       lives: config.initialLives,
@@ -330,6 +447,11 @@ export class Game {
     this.currentLevel += 1;
     this.currentEnemyCount += 1;
     const preservedLives = this.state.lives;
+    // Level-up bonus score
+    const levelBonus = this.currentLevel * 500;
+    this.score += levelBonus;
+    audio.playLevelUp();
+    this.terrainCacheDirty = true;
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
       lives: preservedLives,
@@ -345,9 +467,22 @@ export class Game {
     this.state.player.trailActive = false;
     this.screenShake = 1;
     this.screenShakeTime = 0.2;
+    this.damageFlash = 0.35;
+    this.comboCount = 0;
+    audio.playDamage();
+
+    // Haptic feedback
+    if (this.touchMode && navigator.vibrate) {
+      navigator.vibrate([80, 30, 80]);
+    }
 
     if (this.state.lives <= 0) {
       this.state.mode = "lost";
+      if (this.score > this.highScore) {
+        this.highScore = this.score;
+        saveHighScore(this.score);
+      }
+      audio.stopEngine();
       this.syncMenuVisibility();
       return;
     }
@@ -366,13 +501,31 @@ export class Game {
   }
 
   normalizeEnemySpeed(enemy) {
+    const def = ENEMY_VARIANTS[enemy.variant || "normal"];
+    const minSpd = config.enemySpeedMin * def.speedMul;
+    const maxSpd = config.enemySpeedMax * def.speedMul;
+    // Apply slow powerup
+    const slowActive = this.state.activePowerups.some(p => p.type === "slow");
+    const slowMul = slowActive ? 0.55 : 1;
     const speed = Math.hypot(enemy.vx, enemy.vy);
-    if (speed < config.enemySpeedMin || speed > config.enemySpeedMax) {
+    const targetMin = minSpd * slowMul;
+    const targetMax = maxSpd * slowMul;
+    if (speed < targetMin || speed > targetMax) {
       const angle = Math.atan2(enemy.vy, enemy.vx);
-      const nextSpeed = clamp(speed, config.enemySpeedMin, config.enemySpeedMax);
+      const nextSpeed = clamp(speed, targetMin, targetMax);
       enemy.vx = Math.cos(angle) * nextSpeed;
       enemy.vy = Math.sin(angle) * nextSpeed;
     }
+  }
+
+  addScore(points) {
+    const multiActive = this.state.activePowerups.some(p => p.type === "scoreMulti");
+    const multi = multiActive ? 2 : 1;
+    this.score += Math.round(points * multi * (1 + this.comboCount * 0.25));
+  }
+
+  hasActivePowerup(type) {
+    return this.state.activePowerups.some(p => p.type === type);
   }
 
   update(dt, input) {
@@ -380,6 +533,20 @@ export class Game {
     if (this.screenShakeTime > 0) {
       this.screenShakeTime -= dt;
       this.screenShake = this.screenShakeTime > 0 ? this.screenShakeTime / 0.2 : 0;
+    }
+    if (this.damageFlash > 0) {
+      this.damageFlash = Math.max(0, this.damageFlash - dt);
+    }
+    if (this.claimFlashTime > 0) {
+      this.claimFlashTime = Math.max(0, this.claimFlashTime - dt);
+    }
+
+    // Tutorial timer
+    if (!this.tutorialShown && this.state.mode === "playing") {
+      this.tutorialTime += dt;
+      if (this.tutorialTime > 5) {
+        this.tutorialShown = true;
+      }
     }
 
     if (this.state.mode === "menu") {
@@ -393,12 +560,27 @@ export class Game {
       return;
     }
 
+    // Pause check
+    if (input.consume("KeyP") || input.consume("Escape")) {
+      this.togglePause();
+    }
+
+    if (this.paused) {
+      return;
+    }
+
     this.updateNitro(dt, input);
     this.updatePlayer(dt, input);
     this.updateEnemies(dt);
     this.updateSparks(dt);
     this.updateSmoke(dt);
+    this.updatePowerups(dt);
+    this.updateActivePowerups(dt);
     this.detectDamage();
+
+    // Engine audio
+    const playerSpeed = Math.hypot(this.state.player.vx, this.state.player.vy) / this.state.player.speed;
+    audio.updateEngine(playerSpeed, this.state.nitro.activeSeconds > 0);
 
     if (this.state.player.invuln > 0) {
       this.state.player.invuln = Math.max(0, this.state.player.invuln - dt);
@@ -409,9 +591,10 @@ export class Game {
     const axis = input.axis();
     const { player, claimed, nitro } = this.state;
     const nitroSpeedMultiplier = nitro.activeSeconds > 0 ? config.ignitionNitroMultiplier : 1;
+    const speedPowerup = this.hasActivePowerup("speed") ? 1.4 : 1;
 
-    player.vx = axis.x * player.speed * nitroSpeedMultiplier;
-    player.vy = axis.y * player.speed * nitroSpeedMultiplier;
+    player.vx = axis.x * player.speed * nitroSpeedMultiplier * speedPowerup;
+    player.vy = axis.y * player.speed * nitroSpeedMultiplier * speedPowerup;
 
     if (axis.x !== 0 || axis.y !== 0) {
       player.angle = Math.atan2(axis.y, axis.x);
@@ -460,7 +643,9 @@ export class Game {
     if (this.state.trailMask[idx]) {
       const last = this.state.trailCells[this.state.trailCells.length - 1];
       if (last !== idx) {
-        this.loseLife();
+        if (!this.hasActivePowerup("shield")) {
+          this.loseLife();
+        }
       }
       return;
     }
@@ -468,7 +653,9 @@ export class Game {
     this.recordTrailCell(idx);
 
     if (oldX === player.x && oldY === player.y && (axis.x !== 0 || axis.y !== 0)) {
-      this.loseLife();
+      if (!this.hasActivePowerup("shield")) {
+        this.loseLife();
+      }
     }
   }
 
@@ -502,6 +689,12 @@ export class Game {
     nitro.activeSeconds = config.ignitionNitroDuration;
     this.screenShake = Math.max(this.screenShake, 0.26);
     this.screenShakeTime = Math.max(this.screenShakeTime, 0.1);
+    audio.playNitro();
+
+    if (this.touchMode && navigator.vibrate) {
+      navigator.vibrate(40);
+    }
+
     return true;
   }
 
@@ -516,6 +709,11 @@ export class Game {
       return;
     }
 
+    const prevPercent = this.state.claimedPercent;
+
+    // Store cells for claim flash animation
+    this.claimFlashCells = [...this.state.trailCells];
+
     for (const idx of this.state.trailCells) {
       this.state.claimed[idx] = 1;
       this.state.trailMask[idx] = 0;
@@ -527,10 +725,29 @@ export class Game {
       const idx = cellToIndex(col, row, cols);
       if (!this.state.claimed[idx] && !reachable[idx]) {
         this.state.claimed[idx] = 1;
+        this.claimFlashCells.push(idx);
       }
     });
 
     this.state.claimedPercent = getClaimedPercent(this.state.claimed);
+    this.terrainCacheDirty = true;
+
+    // Claim animation timer
+    this.claimFlashTime = 0.4;
+
+    // Score for claim
+    const claimDelta = this.state.claimedPercent - prevPercent;
+    const claimPoints = Math.round(claimDelta * 10000);
+    // Big claim bonus
+    const bigBonus = claimDelta > 0.1 ? 500 : 0;
+    this.comboCount += 1;
+    this.addScore(claimPoints + bigBonus);
+
+    audio.playClaim(this.state.claimedPercent);
+
+    if (this.touchMode && navigator.vibrate) {
+      navigator.vibrate(25);
+    }
 
     for (const enemy of this.state.enemies) {
       const enemyCell = cellToIndex(
@@ -560,10 +777,131 @@ export class Game {
     }
   }
 
+  updatePowerups(dt) {
+    const st = this.state;
+    // Spawn timer
+    st.powerupSpawnTimer -= dt;
+    if (st.powerupSpawnTimer <= 0 && st.powerups.length < config.maxPowerups) {
+      st.powerupSpawnTimer = config.powerupSpawnInterval + Math.random() * 3;
+      const pu = createPowerup(config.worldWidth, config.worldHeight, config.cell, st.claimed, cols);
+      if (pu) {
+        st.powerups.push(pu);
+      }
+    }
+
+    // Age and collect
+    const { player } = st;
+    let write = 0;
+    for (let i = 0; i < st.powerups.length; i++) {
+      const pu = st.powerups[i];
+      pu.life += dt;
+      pu.pulse += dt * 3;
+      if (pu.life >= pu.maxLife) continue;
+
+      // Player collision
+      const dx = player.x - pu.x;
+      const dy = player.y - pu.y;
+      if (dx * dx + dy * dy <= (player.radius + pu.radius) * (player.radius + pu.radius)) {
+        this.collectPowerup(pu);
+        continue;
+      }
+
+      st.powerups[write] = pu;
+      write++;
+    }
+    st.powerups.length = write;
+  }
+
+  collectPowerup(pu) {
+    const def = POWERUP_TYPES[pu.type];
+    audio.playPickup();
+
+    if (this.touchMode && navigator.vibrate) {
+      navigator.vibrate(20);
+    }
+
+    if (pu.type === "extraLife") {
+      this.state.lives += 1;
+      this.addScore(200);
+    } else {
+      const effect = createActivePowerupEffect(pu.type);
+      if (effect) {
+        // Replace existing of same type
+        const existing = this.state.activePowerups.findIndex(p => p.type === pu.type);
+        if (existing >= 0) {
+          this.state.activePowerups[existing].remaining = effect.remaining;
+        } else {
+          this.state.activePowerups.push(effect);
+        }
+      }
+      this.addScore(150);
+    }
+  }
+
+  updateActivePowerups(dt) {
+    let write = 0;
+    const ap = this.state.activePowerups;
+    for (let i = 0; i < ap.length; i++) {
+      ap[i].remaining -= dt;
+      if (ap[i].remaining > 0) {
+        ap[write] = ap[i];
+        write++;
+      }
+    }
+    ap.length = write;
+  }
+
   updateEnemies(dt) {
+    const playerX = this.state.player.x;
+    const playerY = this.state.player.y;
+
     for (const enemy of this.state.enemies) {
       enemy.spin += dt * 2.2;
       enemy.firePhase += dt * 4.5;
+
+      // Tracker variant: nudge toward player
+      if (enemy.variant === "tracker") {
+        const dx = playerX - enemy.x;
+        const dy = playerY - enemy.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 1) {
+          const nudge = 35 * dt;
+          enemy.vx += (dx / dist) * nudge;
+          enemy.vy += (dy / dist) * nudge;
+        }
+      }
+
+      // Charger variant: periodic charge toward player
+      if (enemy.variant === "charger") {
+        if (!enemy.charging) {
+          enemy.chargeTimer -= dt;
+          if (enemy.chargeTimer <= 0) {
+            enemy.charging = true;
+            enemy.chargeTimeLeft = 0.6;
+            const dx = playerX - enemy.x;
+            const dy = playerY - enemy.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 1) {
+              const chargeSpeed = config.enemySpeedMax * 2.2;
+              enemy.vx = (dx / dist) * chargeSpeed;
+              enemy.vy = (dy / dist) * chargeSpeed;
+            }
+          }
+        } else {
+          enemy.chargeTimeLeft -= dt;
+          if (enemy.chargeTimeLeft <= 0) {
+            enemy.charging = false;
+            enemy.chargeTimer = 2.5 + Math.random() * 2;
+            // Normalize back after charge
+            const speed = Math.hypot(enemy.vx, enemy.vy);
+            if (speed > 0) {
+              const target = config.enemySpeedMax * ENEMY_VARIANTS.charger.speedMul;
+              enemy.vx = (enemy.vx / speed) * target;
+              enemy.vy = (enemy.vy / speed) * target;
+            }
+          }
+        }
+      }
 
       let bouncedX = false;
       let bouncedY = false;
@@ -592,7 +930,10 @@ export class Game {
         this.screenShakeTime = Math.max(this.screenShakeTime, 0.08);
       }
 
-      this.normalizeEnemySpeed(enemy);
+      // Don't normalize charger while charging
+      if (!(enemy.variant === "charger" && enemy.charging)) {
+        this.normalizeEnemySpeed(enemy);
+      }
 
       enemy.sparkBudget += config.sparkSpawnRate * dt;
       while (enemy.sparkBudget >= 1) {
@@ -744,8 +1085,9 @@ export class Game {
     }
 
     const { enemies, player, trailMask } = this.state;
+    const shielded = this.hasActivePowerup("shield");
 
-    if (player.invuln <= 0) {
+    if (player.invuln <= 0 && !shielded) {
       for (const enemy of enemies) {
         const dx = enemy.x - player.x;
         const dy = enemy.y - player.y;
@@ -757,7 +1099,7 @@ export class Game {
       }
     }
 
-    if (player.trailActive) {
+    if (player.trailActive && !shielded) {
       for (const enemy of enemies) {
         if (circleIntersectsMask(trailMask, cols, rows, config.cell, enemy.x, enemy.y, enemy.radius)) {
           this.loseLife();
@@ -765,6 +1107,26 @@ export class Game {
         }
       }
     }
+  }
+
+  /** Find closest enemy distance to any trail cell */
+  getTrailDangerLevel() {
+    if (!this.state.player.trailActive || this.state.trailCells.length === 0) return 0;
+    const { enemies, trailCells } = this.state;
+    let minDist = Infinity;
+    for (const enemy of enemies) {
+      for (let i = 0; i < trailCells.length; i += Math.max(1, Math.floor(trailCells.length / 10))) {
+        const idx = trailCells[i];
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        const cx = (col + 0.5) * config.cell;
+        const cy = (row + 0.5) * config.cell;
+        const d = Math.hypot(enemy.x - cx, enemy.y - cy);
+        if (d < minDist) minDist = d;
+      }
+    }
+    // Normalize: danger increases as enemy gets closer to trail
+    return clamp(1 - minDist / 200, 0, 1);
   }
 
   render() {
@@ -781,7 +1143,23 @@ export class Game {
       viewScale: this.viewScale,
       state: this.state,
       config,
+      score: this.score,
+      highScore: this.highScore,
+      paused: this.paused,
+      damageFlash: this.damageFlash,
+      claimFlashCells: this.claimFlashCells,
+      claimFlashTime: this.claimFlashTime,
+      trailDanger: this.getTrailDangerLevel(),
+      highContrastMode: this.highContrastMode,
+      tutorialShown: this.tutorialShown,
+      tutorialTime: this.tutorialTime,
+      terrainCacheDirty: this.terrainCacheDirty,
     };
+
+    // Pass terrain cache refs
+    snapshot.terrainCanvas = this.terrainCanvas;
+    snapshot.edgeCanvas = this.edgeCanvas;
+
     if (this.rotateForPortrait) {
       this.ctx.save();
       this.ctx.translate(this.canvasWidth, 0);
@@ -794,13 +1172,19 @@ export class Game {
         canvasWidth: this.canvasWidth,
         canvasHeight: this.canvasHeight,
       });
-      return;
+    } else {
+      renderFrame(this.ctx, {
+        ...snapshot,
+        touchMode: this.touchMode,
+      });
     }
 
-    renderFrame(this.ctx, {
-      ...snapshot,
-      touchMode: this.touchMode,
-    });
+    // Update cache refs from render
+    if (snapshot.terrainCacheDirty) {
+      this.terrainCanvas = snapshot.terrainCanvas;
+      this.edgeCanvas = snapshot.edgeCanvas;
+      this.terrainCacheDirty = false;
+    }
   }
 
   renderToText() {
@@ -836,6 +1220,9 @@ export class Game {
     const payload = {
       coordinateSystem: "origin=top-left,+x=right,+y=down",
       mode,
+      score: this.score,
+      highScore: this.highScore,
+      paused: this.paused,
       player: {
         x: Number(player.x.toFixed(2)),
         y: Number(player.y.toFixed(2)),
@@ -857,6 +1244,7 @@ export class Game {
         vx: Number(enemy.vx.toFixed(2)),
         vy: Number(enemy.vy.toFixed(2)),
         radius: enemy.radius,
+        variant: enemy.variant || "normal",
       })),
       enemy:
         enemies.length > 0
@@ -889,11 +1277,16 @@ export class Game {
       presentation: {
         rotatedPortrait: this.rotateForPortrait,
         touchMode: this.touchMode,
+        highContrastMode: this.highContrastMode,
       },
       nitro: {
         activeSeconds: Number(nitro.activeSeconds.toFixed(3)),
         cooldownSeconds: Number(nitro.cooldownSeconds.toFixed(3)),
         speedMultiplier: nitro.activeSeconds > 0 ? config.ignitionNitroMultiplier : 1,
+      },
+      powerups: {
+        onField: this.state.powerups.length,
+        active: this.state.activePowerups.map(p => ({ type: p.type, remaining: Number(p.remaining.toFixed(2)) })),
       },
     };
     return JSON.stringify(payload, null, 2);
