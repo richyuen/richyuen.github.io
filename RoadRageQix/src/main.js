@@ -127,6 +127,7 @@ window.addEventListener("orientationchange", () => {
 });
 
 window.addEventListener("keydown", (event) => {
+  ensureAudioResumed();
   if (event.code === "KeyF") {
     event.preventDefault();
     toggleFullscreen();
@@ -195,6 +196,7 @@ function setupTouchControls() {
   };
 
   touchPad.addEventListener("pointerdown", (event) => {
+    ensureAudioResumed();
     if (activeTouchPointerId !== null) {
       return;
     }
@@ -234,6 +236,7 @@ function setupTouchControls() {
   };
 
   touchRestartButton?.addEventListener("pointerdown", (event) => {
+    ensureAudioResumed();
     if (game.state.mode === "playing") {
       input.pressVirtual("Space");
     }

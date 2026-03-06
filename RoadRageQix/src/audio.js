@@ -3,35 +3,54 @@
 let audioCtx = null;
 let masterGain = null;
 let ambientNode = null;
+let ambientGain = null;
 let engineNode = null;
 let engineGain = null;
+let resumed = false;
 
 function getCtx() {
   if (!audioCtx) {
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       masterGain = audioCtx.createGain();
-      masterGain.gain.value = 0.35;
+      masterGain.gain.value = 0.45;
       masterGain.connect(audioCtx.destination);
     } catch {
       return null;
     }
   }
-  if (audioCtx.state === "suspended") {
-    audioCtx.resume().catch(() => {});
-  }
   return audioCtx;
 }
 
-function now() {
+/**
+ * MUST be called from a direct user-gesture handler (click/touchstart/keydown).
+ * Returns a promise that resolves when the context is running.
+ */
+export function ensureAudioResumed() {
   const ctx = getCtx();
-  return ctx ? ctx.currentTime : 0;
+  if (!ctx) return;
+  if (ctx.state === "running") {
+    resumed = true;
+    return;
+  }
+  // resume() must be called inside a user-gesture callstack
+  ctx.resume().then(() => {
+    resumed = true;
+  }).catch(() => {});
+}
+
+function isReady() {
+  return audioCtx && resumed && audioCtx.state === "running";
+}
+
+function now() {
+  return audioCtx ? audioCtx.currentTime : 0;
 }
 
 /** Short noise burst for spark ricochet */
 export function playSpark() {
-  const ctx = getCtx();
-  if (!ctx) return;
+  if (!isReady()) return;
+  const ctx = audioCtx;
   const t = now();
   const bufLen = Math.floor(ctx.sampleRate * 0.04);
   const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
@@ -42,7 +61,7 @@ export function playSpark() {
   const src = ctx.createBufferSource();
   src.buffer = buf;
   const g = ctx.createGain();
-  g.gain.setValueAtTime(0.06, t);
+  g.gain.setValueAtTime(0.08, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
   const hp = ctx.createBiquadFilter();
   hp.type = "highpass";
@@ -54,8 +73,8 @@ export function playSpark() {
 
 /** Territory claim sound - rising tone */
 export function playClaim(percent) {
-  const ctx = getCtx();
-  if (!ctx) return;
+  if (!isReady()) return;
+  const ctx = audioCtx;
   const t = now();
   const osc = ctx.createOscillator();
   const g = ctx.createGain();
@@ -63,7 +82,7 @@ export function playClaim(percent) {
   osc.type = "square";
   osc.frequency.setValueAtTime(baseFreq, t);
   osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, t + 0.15);
-  g.gain.setValueAtTime(0.12, t);
+  g.gain.setValueAtTime(0.15, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
   osc.connect(g).connect(masterGain);
   osc.start(t);
@@ -72,30 +91,26 @@ export function playClaim(percent) {
 
 /** Damage / life loss - harsh distorted drop */
 export function playDamage() {
-  const ctx = getCtx();
-  if (!ctx) return;
+  if (!isReady()) return;
+  const ctx = audioCtx;
   const t = now();
+
+  // Main voice - distorted sawtooth drop
   const osc = ctx.createOscillator();
   const g = ctx.createGain();
-  const dist = ctx.createWaveShaperFunction
-    ? null
-    : ctx.createWaveShaper();
+  const dist = ctx.createWaveShaper();
+  const curve = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const x = (i / 128) - 1;
+    curve[i] = (Math.PI + 3) * x / (Math.PI + 3 * Math.abs(x));
+  }
+  dist.curve = curve;
   osc.type = "sawtooth";
   osc.frequency.setValueAtTime(320, t);
   osc.frequency.exponentialRampToValueAtTime(60, t + 0.35);
-  g.gain.setValueAtTime(0.18, t);
+  g.gain.setValueAtTime(0.22, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-  if (dist) {
-    const curve = new Float32Array(256);
-    for (let i = 0; i < 256; i++) {
-      const x = (i / 128) - 1;
-      curve[i] = (Math.PI + 3) * x / (Math.PI + 3 * Math.abs(x));
-    }
-    dist.curve = curve;
-    osc.connect(dist).connect(g).connect(masterGain);
-  } else {
-    osc.connect(g).connect(masterGain);
-  }
+  osc.connect(dist).connect(g).connect(masterGain);
   osc.start(t);
   osc.stop(t + 0.42);
 
@@ -105,7 +120,7 @@ export function playDamage() {
   osc2.type = "sine";
   osc2.frequency.setValueAtTime(80, t);
   osc2.frequency.exponentialRampToValueAtTime(30, t + 0.3);
-  g2.gain.setValueAtTime(0.2, t);
+  g2.gain.setValueAtTime(0.25, t);
   g2.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
   osc2.connect(g2).connect(masterGain);
   osc2.start(t);
@@ -114,8 +129,8 @@ export function playDamage() {
 
 /** Level up fanfare - ascending arpeggio */
 export function playLevelUp() {
-  const ctx = getCtx();
-  if (!ctx) return;
+  if (!isReady()) return;
+  const ctx = audioCtx;
   const t = now();
   const notes = [330, 415, 523, 660];
   for (let i = 0; i < notes.length; i++) {
@@ -125,7 +140,7 @@ export function playLevelUp() {
     osc.frequency.value = notes[i];
     const start = t + i * 0.1;
     g.gain.setValueAtTime(0, start);
-    g.gain.linearRampToValueAtTime(0.1, start + 0.02);
+    g.gain.linearRampToValueAtTime(0.12, start + 0.02);
     g.gain.exponentialRampToValueAtTime(0.001, start + 0.2);
     osc.connect(g).connect(masterGain);
     osc.start(start);
@@ -135,8 +150,8 @@ export function playLevelUp() {
 
 /** Nitro activation whoosh */
 export function playNitro() {
-  const ctx = getCtx();
-  if (!ctx) return;
+  if (!isReady()) return;
+  const ctx = audioCtx;
   const t = now();
   const bufLen = Math.floor(ctx.sampleRate * 0.3);
   const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
@@ -148,7 +163,7 @@ export function playNitro() {
   const src = ctx.createBufferSource();
   src.buffer = buf;
   const g = ctx.createGain();
-  g.gain.setValueAtTime(0.14, t);
+  g.gain.setValueAtTime(0.18, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
   const bp = ctx.createBiquadFilter();
   bp.type = "bandpass";
@@ -162,15 +177,15 @@ export function playNitro() {
 
 /** Pickup collect chime */
 export function playPickup() {
-  const ctx = getCtx();
-  if (!ctx) return;
+  if (!isReady()) return;
+  const ctx = audioCtx;
   const t = now();
   const osc = ctx.createOscillator();
   const g = ctx.createGain();
   osc.type = "sine";
   osc.frequency.setValueAtTime(880, t);
   osc.frequency.exponentialRampToValueAtTime(1320, t + 0.08);
-  g.gain.setValueAtTime(0.12, t);
+  g.gain.setValueAtTime(0.15, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
   osc.connect(g).connect(masterGain);
   osc.start(t);
@@ -179,8 +194,8 @@ export function playPickup() {
 
 /** Start/stop ambient wind drone */
 export function startAmbient() {
-  const ctx = getCtx();
-  if (!ctx || ambientNode) return;
+  if (!isReady() || ambientNode) return;
+  const ctx = audioCtx;
   const bufLen = Math.floor(ctx.sampleRate * 2);
   const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
   const data = buf.getChannelData(0);
@@ -190,13 +205,13 @@ export function startAmbient() {
   ambientNode = ctx.createBufferSource();
   ambientNode.buffer = buf;
   ambientNode.loop = true;
-  const g = ctx.createGain();
-  g.gain.value = 0.025;
+  ambientGain = ctx.createGain();
+  ambientGain.gain.value = 0.035;
   const lp = ctx.createBiquadFilter();
   lp.type = "lowpass";
   lp.frequency.value = 280;
   lp.Q.value = 0.7;
-  ambientNode.connect(lp).connect(g).connect(masterGain);
+  ambientNode.connect(lp).connect(ambientGain).connect(masterGain);
   ambientNode.start();
 }
 
@@ -204,13 +219,14 @@ export function stopAmbient() {
   if (ambientNode) {
     try { ambientNode.stop(); } catch {}
     ambientNode = null;
+    ambientGain = null;
   }
 }
 
 /** Engine rumble - continuous, pitch controlled externally */
 export function startEngine() {
-  const ctx = getCtx();
-  if (!ctx || engineNode) return;
+  if (!isReady() || engineNode) return;
+  const ctx = audioCtx;
   const bufLen = Math.floor(ctx.sampleRate * 0.5);
   const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
   const data = buf.getChannelData(0);
@@ -233,7 +249,7 @@ export function startEngine() {
 
 export function updateEngine(speed, nitroActive) {
   if (!engineNode || !engineGain) return;
-  const vol = speed > 0.01 ? 0.06 + speed * 0.04 : 0;
+  const vol = speed > 0.01 ? 0.08 + speed * 0.06 : 0;
   const rate = 0.35 + speed * 0.35 + (nitroActive ? 0.3 : 0);
   engineGain.gain.value = vol;
   engineNode.playbackRate.value = rate;
@@ -245,9 +261,4 @@ export function stopEngine() {
     engineNode = null;
     engineGain = null;
   }
-}
-
-/** Resume audio context on user gesture */
-export function ensureAudioResumed() {
-  getCtx();
 }

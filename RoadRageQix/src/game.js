@@ -270,10 +270,8 @@ export class Game {
     this.tutorialShown = false;
     this.tutorialTime = 0;
 
-    // Terrain cache
-    this.terrainCacheDirty = true;
-    this.terrainCanvas = null;
-    this.edgeCanvas = null;
+    // Terrain cache version (incremented to invalidate render cache)
+    this.terrainCacheVersion = 0;
 
     this.selectedEnemyCount = config.minSelectableEnemies;
     this.currentLevel = 1;
@@ -307,7 +305,7 @@ export class Game {
 
   toggleHighContrast() {
     this.highContrastMode = !this.highContrastMode;
-    this.terrainCacheDirty = true;
+    this.terrainCacheVersion += 1;
     return this.highContrastMode;
   }
 
@@ -405,7 +403,7 @@ export class Game {
     this.worldOffsetY = (this.layoutHeight - this.worldHeight * this.viewScale) * 0.5;
 
     // Invalidate terrain cache on resize
-    this.terrainCacheDirty = true;
+    this.terrainCacheVersion += 1;
   }
 
   syncMenuVisibility() {
@@ -419,8 +417,14 @@ export class Game {
 
   startGame() {
     audio.ensureAudioResumed();
+    // Attempt to start continuous audio immediately, and retry after
+    // resume() completes (it's async on most browsers)
     audio.startAmbient();
     audio.startEngine();
+    setTimeout(() => {
+      audio.startAmbient();
+      audio.startEngine();
+    }, 150);
     this.currentLevel = 1;
     this.currentEnemyCount = this.selectedEnemyCount;
     this.score = 0;
@@ -429,7 +433,7 @@ export class Game {
     this.paused = false;
     this.tutorialShown = false;
     this.tutorialTime = 0;
-    this.terrainCacheDirty = true;
+    this.terrainCacheVersion += 1;
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
       lives: config.initialLives,
@@ -451,7 +455,7 @@ export class Game {
     const levelBonus = this.currentLevel * 500;
     this.score += levelBonus;
     audio.playLevelUp();
-    this.terrainCacheDirty = true;
+    this.terrainCacheVersion += 1;
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
       lives: preservedLives,
@@ -730,7 +734,7 @@ export class Game {
     });
 
     this.state.claimedPercent = getClaimedPercent(this.state.claimed);
-    this.terrainCacheDirty = true;
+    this.terrainCacheVersion += 1;
 
     // Claim animation timer
     this.claimFlashTime = 0.4;
@@ -1153,12 +1157,8 @@ export class Game {
       highContrastMode: this.highContrastMode,
       tutorialShown: this.tutorialShown,
       tutorialTime: this.tutorialTime,
-      terrainCacheDirty: this.terrainCacheDirty,
+      terrainCacheVersion: this.terrainCacheVersion,
     };
-
-    // Pass terrain cache refs
-    snapshot.terrainCanvas = this.terrainCanvas;
-    snapshot.edgeCanvas = this.edgeCanvas;
 
     if (this.rotateForPortrait) {
       this.ctx.save();
@@ -1179,12 +1179,6 @@ export class Game {
       });
     }
 
-    // Update cache refs from render
-    if (snapshot.terrainCacheDirty) {
-      this.terrainCanvas = snapshot.terrainCanvas;
-      this.edgeCanvas = snapshot.edgeCanvas;
-      this.terrainCacheDirty = false;
-    }
   }
 
   renderToText() {
