@@ -25,7 +25,7 @@ export function createPowerup(worldWidth, worldHeight, cell, claimed, cols) {
         type,
         x,
         y,
-        radius: 12,
+        radius: 16,
         life: 0,
         maxLife: 12 + Math.random() * 5,
         pulse: Math.random() * Math.PI * 2,
