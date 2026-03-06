@@ -417,8 +417,14 @@ export class Game {
 
   startGame() {
     audio.ensureAudioResumed();
+    // Attempt to start continuous audio immediately, and retry after
+    // resume() completes (it's async on most browsers)
     audio.startAmbient();
     audio.startEngine();
+    setTimeout(() => {
+      audio.startAmbient();
+      audio.startEngine();
+    }, 150);
     this.currentLevel = 1;
     this.currentEnemyCount = this.selectedEnemyCount;
     this.score = 0;
