@@ -256,11 +256,35 @@ function setupTouchControls() {
     event.preventDefault();
   });
 
+  // Mobile swipe-to-start on canvas
+  let swipeStartX = null;
+  let swipeStartY = null;
   canvas?.addEventListener("pointerdown", (event) => {
-    if (game.state.mode === "menu") {
-      triggerPrimaryAction();
-      event.preventDefault();
+    if (inSetupScreen()) {
+      swipeStartX = event.clientX;
+      swipeStartY = event.clientY;
     }
+    event.preventDefault();
+  });
+  canvas?.addEventListener("pointermove", (event) => {
+    if (swipeStartX === null) return;
+    const dx = event.clientX - swipeStartX;
+    const dy = event.clientY - swipeStartY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 40 && inSetupScreen()) {
+      // Swipe detected - start game
+      swipeStartX = null;
+      swipeStartY = null;
+      triggerPrimaryAction();
+    }
+  });
+  canvas?.addEventListener("pointerup", (event) => {
+    if (swipeStartX !== null && inSetupScreen()) {
+      // Tap (no swipe) - also start
+      triggerPrimaryAction();
+    }
+    swipeStartX = null;
+    swipeStartY = null;
   });
 
   window.addEventListener("blur", () => {

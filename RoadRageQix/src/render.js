@@ -5,11 +5,11 @@ let cachedTerrainCanvas = null;
 let cachedEdgeCanvas = null;
 let terrainCacheVersion = -1;
 
-function drawDustBackground(ctx, width, height, elapsedSeconds) {
+function drawDustBackground(ctx, width, height, elapsedSeconds, theme) {
   const gradient = ctx.createLinearGradient(0, 0, 0, height);
-  gradient.addColorStop(0, "#6f4a2f");
-  gradient.addColorStop(0.45, "#423021");
-  gradient.addColorStop(1, "#1e1712");
+  gradient.addColorStop(0, theme?.bg1 || "#6f4a2f");
+  gradient.addColorStop(0.45, theme?.bg2 || "#423021");
+  gradient.addColorStop(1, theme?.bg3 || "#1e1712");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
 
@@ -24,7 +24,7 @@ function drawDustBackground(ctx, width, height, elapsedSeconds) {
 
   ctx.save();
   ctx.globalAlpha = 0.18;
-  ctx.fillStyle = "#201713";
+  ctx.fillStyle = theme?.hillColor || "#201713";
   for (let i = 0; i < 14; i += 1) {
     const hillW = width * (0.16 + i * 0.02);
     const hillH = height * (0.05 + (i % 3) * 0.018);
@@ -36,8 +36,8 @@ function drawDustBackground(ctx, width, height, elapsedSeconds) {
   ctx.restore();
 }
 
-function drawGridGlow(ctx, worldWidth, worldHeight, cell) {
-  ctx.strokeStyle = "rgba(255, 196, 132, 0.03)";
+function drawGridGlow(ctx, worldWidth, worldHeight, cell, theme) {
+  ctx.strokeStyle = theme?.grid || "rgba(255, 196, 132, 0.03)";
   ctx.lineWidth = 1;
   for (let x = 0; x <= worldWidth; x += cell * 5) {
     ctx.beginPath();
@@ -54,11 +54,14 @@ function drawGridGlow(ctx, worldWidth, worldHeight, cell) {
 }
 
 /** Renders claimed terrain to an offscreen canvas (cached) */
-function renderTerrainToCache(state, config, highContrast) {
+function renderTerrainToCache(state, config, highContrast, theme) {
   const { claimed } = state;
   const { cell } = config;
   const cols = Math.floor(config.worldWidth / cell);
   const rows = Math.floor(config.worldHeight / cell);
+  const tb = theme?.terrainBase || [118, 100, 78];
+  const borderColor = theme?.border || "#dccab0";
+  const highlightColor = theme?.terrainHighlight || "rgba(255, 236, 208, 0.16)";
 
   const terrainCanvas = document.createElement("canvas");
   terrainCanvas.width = config.worldWidth;
@@ -76,12 +79,12 @@ function renderTerrainToCache(state, config, highContrast) {
       if (highContrast) {
         tctx.fillStyle = border ? "#eee" : `rgb(${80 + tone * 30}, ${140 + tone * 30}, ${200 + tone * 20})`;
       } else {
-        tctx.fillStyle = border ? "#dccab0" : `rgba(${118 + tone * 24}, ${100 + tone * 20}, ${78 + tone * 16}, 0.92)`;
+        tctx.fillStyle = border ? borderColor : `rgba(${tb[0] + tone * 24}, ${tb[1] + tone * 20}, ${tb[2] + tone * 16}, 0.92)`;
       }
       tctx.fillRect(x, y, cell, cell);
       if (!border) {
         if ((col + row) % 2 === 0) {
-          tctx.fillStyle = highContrast ? "rgba(200, 230, 255, 0.22)" : "rgba(255, 236, 208, 0.16)";
+          tctx.fillStyle = highContrast ? "rgba(200, 230, 255, 0.22)" : highlightColor;
           tctx.fillRect(x, y, cell, cell * 0.45);
         }
         if ((col + row) % 5 === 0) {
@@ -120,8 +123,8 @@ function renderTerrainToCache(state, config, highContrast) {
   if (segments.length > 0) {
     ectx.globalCompositeOperation = "lighter";
     ectx.lineCap = "round";
-    const edgeColor1 = highContrast ? "rgba(100, 180, 255, 0.7)" : "rgba(255, 123, 68, 0.66)";
-    const edgeColor2 = highContrast ? "rgba(200, 230, 255, 0.98)" : "rgba(255, 245, 220, 0.98)";
+    const edgeColor1 = highContrast ? "rgba(100, 180, 255, 0.7)" : (theme?.edge || "rgba(255, 123, 68, 0.66)");
+    const edgeColor2 = highContrast ? "rgba(200, 230, 255, 0.98)" : (theme?.edgeBright || "rgba(255, 245, 220, 0.98)");
 
     ectx.strokeStyle = edgeColor1;
     ectx.lineWidth = 6.2;
@@ -641,7 +644,179 @@ function drawMinimap(ctx, state, config, canvasWidth) {
   ctx.restore();
 }
 
-function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore) {
+function drawExhaustParticles(ctx, particles) {
+  if (!particles || particles.length === 0) return;
+  ctx.save();
+  for (const p of particles) {
+    const age = p.life / p.maxLife;
+    const alpha = (1 - age) * 0.5;
+    if (alpha <= 0.01) continue;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = `rgb(${120 + age * 60}, ${100 + age * 40}, ${80 + age * 30})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawEnemyWarningIndicators(ctx, enemies, player, worldWidth, worldHeight) {
+  if (!enemies || enemies.length === 0) return;
+  ctx.save();
+  for (const enemy of enemies) {
+    const dx = enemy.x - player.x;
+    const dy = enemy.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 80) continue; // too close for arrow, player can see it
+
+    const angle = Math.atan2(dy, dx);
+    // Arrow position: clamp to edge of a rect around player
+    const margin = 40;
+    const halfW = worldWidth / 2 - margin;
+    const halfH = worldHeight / 2 - margin;
+    const cx = worldWidth / 2;
+    const cy = worldHeight / 2;
+
+    // Position on world border pointing toward enemy
+    const edgeDist = Math.min(halfW / Math.abs(Math.cos(angle) || 0.001), halfH / Math.abs(Math.sin(angle) || 0.001));
+    const arrowDist = Math.min(dist * 0.4, edgeDist);
+    const ax = player.x + Math.cos(angle) * arrowDist;
+    const ay = player.y + Math.sin(angle) * arrowDist;
+
+    // Clamp to world
+    const clampedX = Math.max(margin, Math.min(worldWidth - margin, ax));
+    const clampedY = Math.max(margin, Math.min(worldHeight - margin, ay));
+
+    // Urgency based on distance
+    const urgency = Math.max(0, 1 - dist / 300);
+    const alpha = 0.3 + urgency * 0.5;
+    const size = 6 + urgency * 4;
+
+    ctx.save();
+    ctx.translate(clampedX, clampedY);
+    ctx.rotate(angle);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = enemy.variantColor || "#ff4422";
+    ctx.beginPath();
+    ctx.moveTo(size, 0);
+    ctx.lineTo(-size * 0.6, -size * 0.5);
+    ctx.lineTo(-size * 0.6, size * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawLevelTransition(ctx, canvasWidth, canvasHeight, transitionTime, duration, level, themeName) {
+  if (transitionTime <= 0) return;
+  const progress = 1 - transitionTime / duration;
+
+  // Wipe effect
+  const wipeWidth = canvasWidth * 0.15;
+  const wipeX = progress < 0.5
+    ? -wipeWidth + (canvasWidth + wipeWidth * 2) * (progress * 2)
+    : canvasWidth + wipeWidth;
+
+  if (progress < 0.5) {
+    ctx.save();
+    ctx.fillStyle = `rgba(255, 200, 100, ${0.15 * (1 - progress * 2)})`;
+    ctx.fillRect(wipeX - wipeWidth, 0, wipeWidth, canvasHeight);
+    ctx.restore();
+  }
+
+  // Banner
+  const bannerAlpha = progress < 0.15 ? progress / 0.15
+    : progress > 0.7 ? (1 - progress) / 0.3
+    : 1;
+
+  if (bannerAlpha > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = bannerAlpha * 0.85;
+    ctx.fillStyle = "rgba(8, 7, 6, 0.7)";
+    const bannerH = 90;
+    const bannerY = canvasHeight / 2 - bannerH / 2;
+    ctx.fillRect(0, bannerY, canvasWidth, bannerH);
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffd28e";
+    ctx.font = '700 42px "Impact", "Haettenschweiler", sans-serif';
+    ctx.fillText(`LEVEL ${level}`, canvasWidth / 2, canvasHeight / 2 - 6);
+    ctx.fillStyle = "#f4dcc1";
+    ctx.font = '500 18px "Bahnschrift", "Segoe UI", sans-serif';
+    ctx.fillText(themeName || "Wasteland", canvasWidth / 2, canvasHeight / 2 + 26);
+    ctx.textAlign = "left";
+    ctx.restore();
+  }
+}
+
+function drawStreakIndicator(ctx, canvasWidth, streakCount, streakFlash) {
+  if (streakCount < 2) return;
+  const x = canvasWidth / 2;
+  const y = 52;
+
+  ctx.save();
+  ctx.textAlign = "center";
+
+  if (streakFlash > 0) {
+    const flashAlpha = streakFlash / 1.2;
+    ctx.globalAlpha = flashAlpha;
+    ctx.fillStyle = "#ffdd44";
+    ctx.font = '700 28px "Impact", "Haettenschweiler", sans-serif';
+    ctx.fillText(`STREAK x${streakCount}!`, x, y);
+  } else {
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = "#ffd28e";
+    ctx.font = '600 16px "Bahnschrift", "Segoe UI", sans-serif';
+    ctx.fillText(`Streak: ${streakCount}`, x, y);
+  }
+
+  ctx.textAlign = "left";
+  ctx.restore();
+}
+
+function drawRunHistory(ctx, canvasWidth, canvasHeight, runHistory) {
+  if (!runHistory || runHistory.length === 0) return;
+  const x = canvasWidth / 2;
+  let y = canvasHeight / 2 + 100;
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#f4dcc1";
+  ctx.font = '600 14px "Bahnschrift", "Segoe UI", sans-serif';
+  ctx.fillText("Recent Runs:", x, y);
+  y += 20;
+
+  ctx.font = '500 12px "Bahnschrift", "Segoe UI", sans-serif';
+  ctx.fillStyle = "rgba(244, 220, 193, 0.7)";
+  const shown = runHistory.slice(0, 5);
+  for (const run of shown) {
+    ctx.fillText(`Lv${run.level} | Score: ${run.score} | Streak: ${run.streak}`, x, y);
+    y += 16;
+  }
+  ctx.textAlign = "left";
+  ctx.restore();
+}
+
+function drawStunnedEffect(ctx, enemy, elapsedSeconds) {
+  if (!enemy.stunTimer || enemy.stunTimer <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = 0.4 + Math.sin(elapsedSeconds * 10) * 0.2;
+  ctx.strokeStyle = "#ffdd44";
+  ctx.lineWidth = 2;
+  // Stars around stunned enemy
+  for (let i = 0; i < 3; i++) {
+    const angle = elapsedSeconds * 3 + i * (Math.PI * 2 / 3);
+    const sx = enemy.x + Math.cos(angle) * (enemy.radius + 8);
+    const sy = enemy.y + Math.sin(angle) * (enemy.radius + 8);
+    ctx.beginPath();
+    ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore, theme, streakCount) {
   const percent = Math.round(state.claimedPercent * 100);
   const nitro = state.nitro ?? { activeSeconds: 0, cooldownSeconds: 0 };
   const nitroReady = nitro.activeSeconds <= 0 && nitro.cooldownSeconds <= 0;
@@ -655,7 +830,8 @@ function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore) {
   ctx.lineWidth = 1;
   ctx.strokeRect(18, 14, 390, 155);
 
-  ctx.fillStyle = "#f5d4a5";
+  const hudColor = theme?.hudAccent || "#f5d4a5";
+  ctx.fillStyle = hudColor;
   ctx.font = '600 20px "Bahnschrift", "Segoe UI", sans-serif';
   ctx.fillText(`Territory: ${percent}% / 75%`, 34, 46);
   ctx.fillText(`Lives: ${state.lives}`, 34, 74);
@@ -665,7 +841,8 @@ function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore) {
   // Score
   ctx.fillStyle = "#ffd28f";
   ctx.font = '600 16px "Bahnschrift", "Segoe UI", sans-serif';
-  ctx.fillText(`Score: ${score}  High: ${highScore}`, 34, 114);
+  const streakTxt = streakCount >= 2 ? `  Streak: ${streakCount}` : "";
+  ctx.fillText(`Score: ${score}  High: ${highScore}${streakTxt}`, 34, 114);
 
   const nitroLabel = nitroActive
     ? `IGNITION ACTIVE ${nitro.activeSeconds.toFixed(1)}s`
@@ -715,7 +892,7 @@ function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore) {
 
   ctx.fillStyle = "rgba(245, 212, 165, 0.7)";
   ctx.font = '500 14px "Bahnschrift", "Segoe UI", sans-serif';
-  ctx.fillText("Wasteland Sector", canvasWidth - 170, 32);
+  ctx.fillText(`${theme?.name || "Wasteland"} Sector`, canvasWidth - 170, 32);
 }
 
 function drawDamageFlash(ctx, canvasWidth, canvasHeight, flashTime) {
@@ -814,10 +991,12 @@ export function renderWorld(ctx, game) {
     highContrastMode,
     claimFlashCells,
     claimFlashTime,
+    theme,
+    exhaustParticles,
   } = game;
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-  drawDustBackground(ctx, canvasWidth, canvasHeight, elapsedSeconds);
+  drawDustBackground(ctx, canvasWidth, canvasHeight, elapsedSeconds, theme);
 
   ctx.save();
   ctx.translate(worldOffsetX, worldOffsetY);
@@ -826,12 +1005,12 @@ export function renderWorld(ctx, game) {
   ctx.fillStyle = "#1a1411";
   ctx.fillRect(0, 0, worldWidth, worldHeight);
 
-  drawGridGlow(ctx, worldWidth, worldHeight, config.cell);
+  drawGridGlow(ctx, worldWidth, worldHeight, config.cell, theme);
 
   // Cached terrain rendering
   const cacheVersion = game.terrainCacheVersion ?? 0;
   if (cacheVersion !== terrainCacheVersion || !cachedTerrainCanvas) {
-    const cached = renderTerrainToCache(state, config, highContrastMode);
+    const cached = renderTerrainToCache(state, config, highContrastMode, theme);
     cachedTerrainCanvas = cached.terrainCanvas;
     cachedEdgeCanvas = cached.edgeCanvas;
     terrainCacheVersion = cacheVersion;
@@ -842,13 +1021,21 @@ export function renderWorld(ctx, game) {
 
   drawTrail(ctx, state, config, elapsedSeconds, trailDanger || 0, highContrastMode);
   drawClaimFlash(ctx, claimFlashCells, claimFlashTime, config);
+
+  // Exhaust particles
+  drawExhaustParticles(ctx, exhaustParticles);
+
   drawSmoke(ctx, state.smoke, elapsedSeconds);
   drawSparks(ctx, state.sparks, elapsedSeconds);
 
   const enemies = state.enemies ?? (state.enemy ? [state.enemy] : []);
   for (const enemy of enemies) {
     drawEnemy(ctx, enemy, elapsedSeconds);
+    drawStunnedEffect(ctx, enemy, elapsedSeconds);
   }
+
+  // Enemy warning indicators
+  drawEnemyWarningIndicators(ctx, enemies, state.player, worldWidth, worldHeight);
 
   // Edges from cache
   if (cachedEdgeCanvas) {
@@ -883,11 +1070,21 @@ export function renderOverlay(ctx, game) {
     damageFlash,
     tutorialShown,
     tutorialTime,
+    theme,
+    levelTransitionTime,
+    levelTransitionDuration,
+    levelTransitionLevel,
+    streakCount,
+    streakFlash,
+    runHistory,
   } = game;
   const restartPrompt = touchMode ? "Tap Ignition to restart" : "Press Space to restart";
 
-  drawHud(ctx, state, canvasWidth, config, touchMode, score || 0, highScore || 0);
+  drawHud(ctx, state, canvasWidth, config, touchMode, score || 0, highScore || 0, theme, streakCount || 0);
   drawMinimap(ctx, state, config, canvasWidth);
+
+  // Streak indicator
+  drawStreakIndicator(ctx, canvasWidth, streakCount || 0, streakFlash || 0);
 
   // Tutorial overlay
   if (!tutorialShown && state.mode === "playing") {
@@ -898,11 +1095,17 @@ export function renderOverlay(ctx, game) {
     drawEndMessage(ctx, canvasWidth, canvasHeight, true, restartPrompt, score || 0, highScore || 0);
   } else if (state.mode === "lost") {
     drawEndMessage(ctx, canvasWidth, canvasHeight, false, restartPrompt, score || 0, highScore || 0);
+    drawRunHistory(ctx, canvasWidth, canvasHeight, runHistory);
   }
 
   // Damage flash (screen-space)
   if (damageFlash > 0) {
     drawDamageFlash(ctx, canvasWidth, canvasHeight, damageFlash);
+  }
+
+  // Level transition animation
+  if (levelTransitionTime > 0) {
+    drawLevelTransition(ctx, canvasWidth, canvasHeight, levelTransitionTime, levelTransitionDuration || 1.8, levelTransitionLevel || 1, theme?.name);
   }
 
   // Pause overlay
