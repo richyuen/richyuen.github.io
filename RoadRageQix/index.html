@@ -30,23 +30,47 @@
             <button id="enemy-plus-btn" type="button" class="enemy-select-btn" aria-label="Increase starting enemies">+</button>
           </div>
         </div>
-        <ul>
-          <li>Move: WASD or Arrow Keys</li>
-          <li>Ignition Nitro: Space or Shift (touch Ignition while driving)</li>
-          <li>Touch: steer with left joystick; tap Ignition to start/restart or boost while driving</li>
-          <li>Menu/death page: use Left/Right (or +/- buttons) to set starting enemy count</li>
-          <li>Draw a trail through open territory and reconnect to walls</li>
-          <li>Win at 75% claim, avoid contact with active trail and chassis</li>
-          <li>Victory auto-advances to the next level with one extra enemy</li>
-          <li>Press P or Esc to pause/resume during gameplay</li>
-          <li>Press H to toggle high-contrast mode (colorblind friendly)</li>
-          <li>Press F for fullscreen, Esc to exit fullscreen</li>
-          <li>Collect power-ups: Shield, Speed, Slow, Extra Life, Score x2, Bomb (stun enemies), Magnet (auto-close trails)</li>
-          <li>Build claim streaks for bonus points! Consecutive claims without damage earn multiplied rewards</li>
-          <li>Each level has a unique theme — survive to see them all!</li>
-          <li>Mobile: swipe or tap the canvas to start</li>
-        </ul>
-        <button id="start-btn" type="button">Start Engine</button>
+        <div class="menu-buttons">
+          <button id="start-btn" type="button">Start Engine</button>
+          <div class="menu-secondary-buttons">
+            <button id="instructions-btn" type="button" class="menu-link-btn">Instructions</button>
+            <button id="settings-btn" type="button" class="menu-link-btn">Settings</button>
+          </div>
+        </div>
+        <div id="instructions-panel" class="collapsible-panel hidden">
+          <ul>
+            <li>Move: WASD or Arrow Keys</li>
+            <li>Ignition Nitro: Space or Shift (touch Ignition while driving)</li>
+            <li>Touch: steer with left joystick; tap Ignition to start/restart or boost while driving</li>
+            <li>Menu/death page: use Left/Right (or +/- buttons) to set starting enemy count</li>
+            <li>Draw a trail through open territory and reconnect to walls</li>
+            <li>Win at 75% claim, avoid contact with active trail and chassis</li>
+            <li>Victory auto-advances to the next level with one extra enemy</li>
+            <li>Press P or Esc to pause/resume during gameplay</li>
+            <li>Press H to toggle high-contrast mode (colorblind friendly)</li>
+            <li>Press F for fullscreen, Esc to exit fullscreen</li>
+            <li>Collect power-ups: Shield, Speed, Slow, Extra Life, Score x2, Bomb (stun enemies), Magnet (auto-close trails)</li>
+            <li>Build claim streaks for bonus points! Consecutive claims without damage earn multiplied rewards</li>
+            <li>Claim bonus zones (★) for big point bonuses!</li>
+            <li>Close trails quickly — your fuse burns if you take too long!</li>
+            <li>Near-miss dodges earn bonus points and trigger slow-mo!</li>
+            <li>Each level has a unique theme — survive to see them all!</li>
+            <li>Mobile: swipe or tap the canvas to start</li>
+          </ul>
+        </div>
+        <div id="settings-panel" class="collapsible-panel hidden">
+          <div class="settings-group">
+            <label class="settings-label">
+              Volume
+              <input id="volume-slider" type="range" min="0" max="100" value="45" class="settings-slider" />
+            </label>
+            <label class="settings-label">
+              <input id="shake-toggle" type="checkbox" checked class="settings-checkbox" />
+              Screen Shake
+            </label>
+          </div>
+        </div>
+        <span id="version-label" class="version-label"></span>
       </section>
     </main>
     <script type="module" src="./src/main.js"></script>

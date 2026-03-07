@@ -140,6 +140,85 @@ body {
   margin: 0.2rem 0;
 }
 
+.menu-buttons {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+}
+
+.menu-secondary-buttons {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+}
+
+.menu-link-btn {
+  background: none;
+  border: 1px solid rgba(255, 177, 91, 0.35);
+  color: #f0cf9f;
+  font-family: "Bahnschrift", "Segoe UI", sans-serif;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.menu-link-btn:hover {
+  border-color: rgba(255, 177, 91, 0.65);
+  color: #ffd9ac;
+}
+
+.collapsible-panel {
+  max-width: 720px;
+  margin: 0 auto;
+  animation: panelFadeIn 0.2s ease-out;
+}
+
+.collapsible-panel.hidden {
+  display: none;
+}
+
+@keyframes panelFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.settings-group {
+  background: rgba(25, 20, 15, 0.58);
+  border: 1px solid rgba(255, 177, 91, 0.2);
+  padding: 0.8rem 1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.settings-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #f0cf9f;
+  font-size: 0.88rem;
+}
+
+.settings-slider {
+  flex: 1;
+  accent-color: #d67930;
+  max-width: 200px;
+}
+
+.settings-checkbox {
+  accent-color: #d67930;
+  width: 18px;
+  height: 18px;
+}
+
+.version-label {
+  display: block;
+  color: rgba(240, 207, 159, 0.35);
+  font-size: 0.7rem;
+  margin-top: 0.3rem;
+}
+
 #start-btn {
   justify-self: center;
   border: 1px solid rgba(255, 191, 122, 0.8);

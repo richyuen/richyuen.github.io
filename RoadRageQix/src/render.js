@@ -840,6 +840,101 @@ function drawClaimParticles(ctx, particles) {
   ctx.restore();
 }
 
+function drawBonusZones(ctx, bonusZones, config, elapsedSeconds) {
+  if (!bonusZones || bonusZones.length === 0) return;
+  const { cell } = config;
+  ctx.save();
+  for (const bz of bonusZones) {
+    if (bz.collected) continue;
+    const cx = (bz.col + 0.5) * cell;
+    const cy = (bz.row + 0.5) * cell;
+    const r = bz.radius * cell;
+    const pulse = 0.6 + Math.sin(elapsedSeconds * 3 + bz.pulse) * 0.3;
+
+    // Glow ring
+    ctx.globalAlpha = 0.3 * pulse;
+    ctx.strokeStyle = "#ffdd44";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 4 + Math.sin(elapsedSeconds * 2) * 2, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Fill
+    ctx.globalAlpha = 0.12 * pulse;
+    ctx.fillStyle = "#ffdd44";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Star icon
+    ctx.globalAlpha = 0.7 * pulse;
+    ctx.fillStyle = "#ffdd44";
+    ctx.font = `bold ${Math.round(r * 0.8)}px "Impact", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("★", cx, cy + 1);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+
+    // Points label
+    ctx.globalAlpha = 0.5 * pulse;
+    ctx.fillStyle = "#ffee88";
+    ctx.font = '600 9px "Bahnschrift", sans-serif';
+    ctx.textAlign = "center";
+    ctx.fillText(`+${bz.points}`, cx, cy + r + 10);
+    ctx.textAlign = "left";
+  }
+  ctx.restore();
+}
+
+function drawFuseWarning(ctx, canvasWidth, fuseTimer, fuseTimerDuration, trailActive) {
+  if (!trailActive || fuseTimer < fuseTimerDuration * 0.5) return;
+  const urgency = Math.min(1, (fuseTimer - fuseTimerDuration * 0.5) / (fuseTimerDuration * 0.5));
+  const remaining = Math.max(0, fuseTimerDuration - fuseTimer);
+
+  ctx.save();
+  ctx.textAlign = "center";
+
+  if (fuseTimer >= fuseTimerDuration) {
+    // Fuse is burning!
+    ctx.globalAlpha = 0.7 + Math.sin(Date.now() * 0.02) * 0.3;
+    ctx.fillStyle = "#ff3322";
+    ctx.font = '700 22px "Impact", sans-serif';
+    ctx.fillText("FUSE BURNING!", canvasWidth / 2, 78);
+  } else {
+    ctx.globalAlpha = urgency * 0.8;
+    ctx.fillStyle = urgency > 0.7 ? "#ff6633" : "#ffaa44";
+    ctx.font = '600 16px "Bahnschrift", sans-serif';
+    ctx.fillText(`FUSE: ${remaining.toFixed(1)}s`, canvasWidth / 2, 78);
+  }
+
+  ctx.textAlign = "left";
+  ctx.restore();
+}
+
+function drawNearMissEffect(ctx, canvasWidth, canvasHeight, nearMissTime) {
+  if (nearMissTime <= 0) return;
+  const alpha = nearMissTime / 0.4;
+
+  ctx.save();
+  // Blue-tinted slow-mo effect
+  ctx.globalAlpha = alpha * 0.15;
+  ctx.fillStyle = "#4488ff";
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  // "NEAR MISS!" text
+  ctx.globalAlpha = alpha * 0.8;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#88ccff";
+  ctx.font = '700 24px "Impact", sans-serif';
+  ctx.fillText("NEAR MISS!", canvasWidth / 2, canvasHeight / 2 + 50);
+  ctx.fillStyle = "#aaddff";
+  ctx.font = '500 14px "Bahnschrift", sans-serif';
+  ctx.fillText("+100", canvasWidth / 2, canvasHeight / 2 + 72);
+  ctx.textAlign = "left";
+  ctx.restore();
+}
+
 function drawShockwaves(ctx, shockwaves) {
   if (!shockwaves || shockwaves.length === 0) return;
   ctx.save();
@@ -1147,6 +1242,9 @@ export function renderWorld(ctx, game) {
     ctx.drawImage(cachedTerrainCanvas, 0, 0);
   }
 
+  // Bonus zones (draw before trail so trail overlays them)
+  drawBonusZones(ctx, game.bonusZones, config, elapsedSeconds);
+
   drawTrail(ctx, state, config, elapsedSeconds, trailDanger || 0, highContrastMode);
   drawClaimFlash(ctx, claimFlashCells, claimFlashTime, config);
 
@@ -1250,6 +1348,16 @@ export function renderOverlay(ctx, game) {
       ctx.textAlign = "left";
       ctx.restore();
     }
+  }
+
+  // Fuse warning
+  if (state.mode === "playing") {
+    drawFuseWarning(ctx, canvasWidth, game.fuseTimer || 0, game.fuseTimerDuration || 6, state.player?.trailActive);
+  }
+
+  // Near-miss effect
+  if (game.nearMissTime > 0) {
+    drawNearMissEffect(ctx, canvasWidth, canvasHeight, game.nearMissTime);
   }
 
   // Kill cam effect

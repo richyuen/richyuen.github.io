@@ -1,4 +1,4 @@
-import { Game } from "./game.js";
+import { Game, GAME_VERSION } from "./game.js";
 import { InputController } from "./input.js";
 import { ensureAudioResumed } from "./audio.js";
 
@@ -11,9 +11,45 @@ const touchPad = document.getElementById("touch-pad");
 const touchPadKnob = document.getElementById("touch-pad-knob");
 const touchRestartButton = document.getElementById("touch-restart");
 const touchFullscreenButton = document.getElementById("touch-fullscreen");
+const instructionsBtn = document.getElementById("instructions-btn");
+const instructionsPanel = document.getElementById("instructions-panel");
+const settingsBtn = document.getElementById("settings-btn");
+const settingsPanel = document.getElementById("settings-panel");
+const volumeSlider = document.getElementById("volume-slider");
+const shakeToggle = document.getElementById("shake-toggle");
+const versionLabel = document.getElementById("version-label");
 
 const input = new InputController(window);
 const game = new Game(canvas, menuOverlay);
+
+// Version label
+if (versionLabel) versionLabel.textContent = `v${GAME_VERSION}`;
+
+// Instructions toggle
+instructionsBtn?.addEventListener("click", () => {
+  const hidden = instructionsPanel.classList.toggle("hidden");
+  if (!hidden) settingsPanel?.classList.add("hidden");
+});
+
+// Settings toggle
+settingsBtn?.addEventListener("click", () => {
+  const hidden = settingsPanel.classList.toggle("hidden");
+  if (!hidden) instructionsPanel?.classList.add("hidden");
+});
+
+// Settings controls
+if (volumeSlider) {
+  volumeSlider.value = Math.round(game.settingsVolume * 100);
+  volumeSlider.addEventListener("input", () => {
+    game.setVolume(parseInt(volumeSlider.value, 10) / 100);
+  });
+}
+if (shakeToggle) {
+  shakeToggle.checked = game.settingsShakeEnabled;
+  shakeToggle.addEventListener("change", () => {
+    game.setShakeEnabled(shakeToggle.checked);
+  });
+}
 
 let running = true;
 let lastTs = performance.now();
