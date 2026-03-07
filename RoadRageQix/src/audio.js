@@ -538,3 +538,66 @@ export function stopReverb() {
   if (reverbFeedback) { try { reverbFeedback.disconnect(); } catch {} reverbFeedback = null; }
   if (reverbWetGain) { try { reverbWetGain.disconnect(); } catch {} reverbWetGain = null; }
 }
+
+export function setMasterVolume(v) {
+  if (masterGain) masterGain.gain.value = Math.max(0, Math.min(1, v));
+}
+
+export function getMasterVolume() {
+  return masterGain ? masterGain.gain.value : 0.45;
+}
+
+export function playFuseBurn() {
+  if (!isReady()) return;
+  const ctx = audioCtx;
+  const t = now();
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(200, t);
+  osc.frequency.exponentialRampToValueAtTime(800, t + 0.15);
+  g.gain.setValueAtTime(0.06, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = 500;
+  bp.Q.value = 3;
+  osc.connect(bp).connect(g).connect(masterGain);
+  osc.start(t);
+  osc.stop(t + 0.2);
+}
+
+export function playBonusZone() {
+  if (!isReady()) return;
+  const ctx = audioCtx;
+  const t = now();
+  const notes = [523, 659, 784];
+  for (let i = 0; i < notes.length; i++) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = notes[i];
+    const start = t + i * 0.06;
+    g.gain.setValueAtTime(0.1, start);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.15);
+    osc.connect(g).connect(masterGain);
+    osc.start(start);
+    osc.stop(start + 0.16);
+  }
+}
+
+export function playNearMiss() {
+  if (!isReady()) return;
+  const ctx = audioCtx;
+  const t = now();
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(1200, t);
+  osc.frequency.exponentialRampToValueAtTime(400, t + 0.2);
+  g.gain.setValueAtTime(0.08, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+  osc.connect(g).connect(masterGain);
+  osc.start(t);
+  osc.stop(t + 0.25);
+}

@@ -5,6 +5,8 @@ import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./power
 import { getThemeForLevel } from "./themes.js";
 import * as audio from "./audio.js";
 
+export const GAME_VERSION = "0.4.0";
+
 export const config = {
   cell: 8,
   worldWidth: 960,
@@ -25,6 +27,9 @@ export const config = {
   maxSmoke: 320,
   powerupSpawnInterval: 5,
   maxPowerups: 4,
+  fuseTimerDuration: 6,
+  bonusZoneCount: 2,
+  nearMissDistance: 35,
 };
 
 const cols = Math.floor(config.worldWidth / config.cell);
@@ -287,6 +292,14 @@ function saveSelectedSkin(id) {
   try { localStorage.setItem(SELECTED_SKIN_KEY, id); } catch {}
 }
 
+const SETTINGS_KEY = "roadrageqix_settings";
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; }
+}
+function saveSettings(s) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
+}
+
 export class Game {
   constructor(canvas, menuOverlay) {
     this.canvas = canvas;
@@ -377,6 +390,23 @@ export class Game {
     this.bombsUsedThisRun = 0;
     this.levelStartTime = 0;
 
+    // Fuse timer - trail burns from behind if player takes too long
+    this.fuseTimer = 0;
+    this.fuseBurnIndex = 0;
+
+    // Bonus zones - special areas worth extra points
+    this.bonusZones = [];
+
+    // Near-miss slow-mo
+    this.nearMissTime = 0;
+    this.nearMissCooldown = 0;
+
+    // Settings
+    const savedSettings = loadSettings();
+    this.settingsVolume = savedSettings.volume ?? 0.45;
+    this.settingsShakeEnabled = savedSettings.shakeEnabled ?? true;
+    audio.setMasterVolume(this.settingsVolume);
+
     // Terrain cache version (incremented to invalidate render cache)
     this.terrainCacheVersion = 0;
 
@@ -446,6 +476,21 @@ export class Game {
     this.highContrastMode = !this.highContrastMode;
     this.terrainCacheVersion += 1;
     return this.highContrastMode;
+  }
+
+  setVolume(v) {
+    this.settingsVolume = Math.max(0, Math.min(1, v));
+    audio.setMasterVolume(this.settingsVolume);
+    const s = loadSettings();
+    s.volume = this.settingsVolume;
+    saveSettings(s);
+  }
+
+  setShakeEnabled(enabled) {
+    this.settingsShakeEnabled = Boolean(enabled);
+    const s = loadSettings();
+    s.shakeEnabled = this.settingsShakeEnabled;
+    saveSettings(s);
   }
 
   togglePause() {
@@ -587,18 +632,24 @@ export class Game {
     this.bombsUsedThisRun = 0;
     this.levelStartTime = 0;
     this.decayTimer = 0;
+    this.fuseTimer = 0;
+    this.fuseBurnIndex = 0;
+    this.nearMissTime = 0;
+    this.nearMissCooldown = 0;
     this.paused = false;
     this.tutorialShown = false;
     this.tutorialTime = 0;
     this.levelTransitionTime = 0;
     this.currentTheme = getThemeForLevel(1);
     this.terrainCacheVersion += 1;
+    this.bonusZones = [];
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
       lives: config.initialLives,
       mode: "playing",
       level: this.currentLevel,
     });
+    this.spawnBonusZones();
     this.syncMenuVisibility();
   }
 
@@ -635,12 +686,16 @@ export class Game {
     this.claimParticles = [];
     this.levelStartTime = this.elapsedSeconds;
     this.decayTimer = 0;
+    this.fuseTimer = 0;
+    this.fuseBurnIndex = 0;
+    this.nearMissTime = 0;
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
       lives: preservedLives,
       mode: "playing",
       level: this.currentLevel,
     });
+    this.spawnBonusZones();
     this.syncMenuVisibility();
   }
 
@@ -778,11 +833,13 @@ export class Game {
       return;
     }
 
-    // Kill cam slow-mo
+    // Kill cam & near-miss slow-mo
     let effectiveDt = dt;
     if (this.killCamTime > 0) {
       this.killCamTime = Math.max(0, this.killCamTime - dt);
       effectiveDt = dt * 0.15;
+    } else if (this.nearMissTime > 0) {
+      effectiveDt = dt * 0.35;
     }
 
     // Achievement flash timer
@@ -804,6 +861,8 @@ export class Game {
     this.updateTerritoryDecay(effectiveDt);
     this.updateClaimParticles(effectiveDt);
     this.updateShockwaves(effectiveDt);
+    this.updateFuseTimer(effectiveDt);
+    this.updateNearMiss(effectiveDt);
     this.detectDamage();
 
     // Engine audio
@@ -1038,6 +1097,13 @@ export class Game {
       enemy.x = (col + 0.5) * config.cell;
       enemy.y = (row + 0.5) * config.cell;
     }
+
+    // Check bonus zones
+    this.checkBonusZones();
+
+    // Reset fuse timer on successful claim
+    this.fuseTimer = 0;
+    this.fuseBurnIndex = 0;
 
     if (this.state.claimedPercent >= config.winClaimPercent) {
       this.advanceLevel();
@@ -1614,6 +1680,142 @@ export class Game {
     }
   }
 
+  /** Fuse timer: trail burns from behind if player takes too long */
+  updateFuseTimer(dt) {
+    if (!this.state.player.trailActive || this.state.trailCells.length < 2) {
+      this.fuseTimer = 0;
+      this.fuseBurnIndex = 0;
+      return;
+    }
+
+    this.fuseTimer += dt;
+    if (this.fuseTimer < config.fuseTimerDuration) return;
+
+    // Burn trail cells from the start
+    const burnRate = 8; // cells per second once fuse starts
+    const cellsToBurn = Math.floor((this.fuseTimer - config.fuseTimerDuration) * burnRate);
+    while (this.fuseBurnIndex < cellsToBurn && this.fuseBurnIndex < this.state.trailCells.length - 1) {
+      const idx = this.state.trailCells[this.fuseBurnIndex];
+      this.state.trailMask[idx] = 0;
+      // Add burn zone visual at burned cell
+      if (!this.burnZones.some(b => b.idx === idx)) {
+        this.burnZones.push({ idx, timeLeft: 1.0 });
+      }
+      this.fuseBurnIndex++;
+      audio.playFuseBurn();
+    }
+
+    // If fuse catches up to player, lose life
+    if (this.fuseBurnIndex >= this.state.trailCells.length - 1) {
+      if (!this.hasActivePowerup("shield")) {
+        this.loseLife();
+      } else {
+        // Shield protects - just close trail
+        this.state.player.trailActive = false;
+        clearMask(this.state.trailMask, this.state.trailCells);
+      }
+      this.fuseTimer = 0;
+      this.fuseBurnIndex = 0;
+    }
+  }
+
+  /** Spawn bonus zones in unclaimed territory */
+  spawnBonusZones() {
+    this.bonusZones = [];
+    const count = config.bonusZoneCount + Math.floor(this.currentLevel / 3);
+    for (let i = 0; i < count; i++) {
+      const maxAttempts = 60;
+      for (let a = 0; a < maxAttempts; a++) {
+        const col = 3 + Math.floor(Math.random() * (cols - 6));
+        const row = 3 + Math.floor(Math.random() * (rows - 6));
+        const idx = cellToIndex(col, row, cols);
+        if (!this.state.claimed[idx] && !this.bonusZones.some(b => b.col === col && b.row === row)) {
+          this.bonusZones.push({
+            col, row, idx,
+            radius: 2 + Math.floor(Math.random() * 2), // 2-3 cell radius
+            points: 500 + this.currentLevel * 200,
+            collected: false,
+            pulse: Math.random() * Math.PI * 2,
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  /** Check if bonus zones have been claimed */
+  checkBonusZones() {
+    for (const bz of this.bonusZones) {
+      if (bz.collected) continue;
+      // Check if any cell in the bonus zone radius is now claimed
+      let allClaimed = true;
+      for (let dr = -bz.radius; dr <= bz.radius; dr++) {
+        for (let dc = -bz.radius; dc <= bz.radius; dc++) {
+          if (dc * dc + dr * dr > bz.radius * bz.radius) continue;
+          const c = bz.col + dc;
+          const r = bz.row + dr;
+          if (c < 1 || r < 1 || c >= cols - 1 || r >= rows - 1) continue;
+          const idx = cellToIndex(c, r, cols);
+          if (!this.state.claimed[idx]) {
+            allClaimed = false;
+            break;
+          }
+        }
+        if (!allClaimed) break;
+      }
+      if (allClaimed) {
+        bz.collected = true;
+        this.addScore(bz.points);
+        audio.playBonusZone();
+        // Spawn celebration particles
+        const cx = (bz.col + 0.5) * config.cell;
+        const cy = (bz.row + 0.5) * config.cell;
+        for (let i = 0; i < 12; i++) {
+          this.claimParticles.push({
+            x: cx, y: cy,
+            vx: (Math.random() - 0.5) * 200,
+            vy: -60 - Math.random() * 120,
+            life: 0, maxLife: 0.6 + Math.random() * 0.4,
+            size: 2 + Math.random() * 3,
+            hue: 50, // bright gold
+          });
+        }
+      }
+    }
+  }
+
+  /** Near-miss slow-mo: brief bullet-time when barely dodging */
+  updateNearMiss(dt) {
+    if (this.nearMissCooldown > 0) {
+      this.nearMissCooldown -= dt;
+    }
+    if (this.nearMissTime > 0) {
+      this.nearMissTime = Math.max(0, this.nearMissTime - dt);
+    }
+
+    if (this.nearMissCooldown > 0 || this.state.player.invuln > 0) return;
+
+    const { enemies, player } = this.state;
+    const shielded = this.hasActivePowerup("shield");
+    if (shielded) return;
+
+    for (const enemy of enemies) {
+      if (enemy.dead || enemy.stunTimer > 0) continue;
+      const dx = enemy.x - player.x;
+      const dy = enemy.y - player.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = enemy.radius + player.radius;
+      const nearDist = minDist + config.nearMissDistance;
+      if (dist > minDist && dist < nearDist) {
+        this.nearMissTime = 0.4;
+        this.nearMissCooldown = 1.5;
+        this.addScore(100);
+        audio.playNearMiss();
+        break;
+      }
+    }
+  }
+
   /** Find closest enemy distance to any trail cell */
   getTrailDangerLevel() {
     if (!this.state.player.trailActive || this.state.trailCells.length === 0) return 0;
@@ -1635,8 +1837,9 @@ export class Game {
   }
 
   render() {
-    const shakeX = this.screenShake > 0 ? Math.sin(this.elapsedSeconds * 70) * 8 * this.screenShake : 0;
-    const shakeY = this.screenShake > 0 ? Math.cos(this.elapsedSeconds * 84) * 6 * this.screenShake : 0;
+    const shakeEnabled = this.settingsShakeEnabled;
+    const shakeX = shakeEnabled && this.screenShake > 0 ? Math.sin(this.elapsedSeconds * 70) * 8 * this.screenShake : 0;
+    const shakeY = shakeEnabled && this.screenShake > 0 ? Math.cos(this.elapsedSeconds * 84) * 6 * this.screenShake : 0;
     const snapshot = {
       canvasWidth: this.layoutWidth,
       canvasHeight: this.layoutHeight,
@@ -1676,6 +1879,11 @@ export class Game {
       achievementFlash: this.achievementFlash,
       unlockedAchievements: this.unlockedAchievements,
       cumulativeScore: this.cumulativeScore,
+      bonusZones: this.bonusZones,
+      nearMissTime: this.nearMissTime,
+      fuseTimer: this.fuseTimer,
+      fuseTimerDuration: config.fuseTimerDuration,
+      fuseBurnIndex: this.fuseBurnIndex,
     };
 
     if (this.rotateForPortrait) {
