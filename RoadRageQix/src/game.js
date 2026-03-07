@@ -2,6 +2,7 @@ import { circleIntersectsMask, circleIntersectsSolid, clamp, cellToIndex, toCell
 import { createEnemy, createPlayer, createSmoke, createSpark } from "./entities.js";
 import { renderFrame, renderOverlay, renderWorld } from "./render.js";
 import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./powerups.js";
+import { getThemeForLevel } from "./themes.js";
 import * as audio from "./audio.js";
 
 export const config = {
@@ -222,6 +223,26 @@ function saveHighScore(score) {
   } catch {}
 }
 
+/** Run history - last 10 runs */
+const RUN_HISTORY_KEY = "roadrageqix_runhistory";
+
+function loadRunHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(RUN_HISTORY_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRunToHistory(run) {
+  try {
+    const history = loadRunHistory();
+    history.unshift(run);
+    if (history.length > 10) history.length = 10;
+    localStorage.setItem(RUN_HISTORY_KEY, JSON.stringify(history));
+  } catch {}
+}
+
 export class Game {
   constructor(canvas, menuOverlay) {
     this.canvas = canvas;
@@ -270,6 +291,19 @@ export class Game {
     this.tutorialShown = false;
     this.tutorialTime = 0;
 
+    // Level transition
+    this.levelTransitionTime = 0;
+    this.levelTransitionDuration = 1.8;
+    this.levelTransitionLevel = 1;
+
+    // Streak system
+    this.streakCount = 0;
+    this.streakFlash = 0;
+    this.streakBestThisRun = 0;
+
+    // Exhaust particles
+    this.exhaustParticles = [];
+
     // Terrain cache version (incremented to invalidate render cache)
     this.terrainCacheVersion = 0;
 
@@ -279,6 +313,9 @@ export class Game {
 
     // Colorblind mode
     this.highContrastMode = false;
+
+    // Theme
+    this.currentTheme = getThemeForLevel(1);
 
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
@@ -421,18 +458,28 @@ export class Game {
     // resume() completes (it's async on most browsers)
     audio.startAmbient();
     audio.startEngine();
+    audio.startMusic();
+    audio.startProximityTone();
     setTimeout(() => {
       audio.startAmbient();
       audio.startEngine();
+      audio.startMusic();
+      audio.startProximityTone();
     }, 150);
     this.currentLevel = 1;
     this.currentEnemyCount = this.selectedEnemyCount;
     this.score = 0;
     this.comboCount = 0;
     this.scoreMultiplier = 1;
+    this.streakCount = 0;
+    this.streakFlash = 0;
+    this.streakBestThisRun = 0;
+    this.exhaustParticles = [];
     this.paused = false;
     this.tutorialShown = false;
     this.tutorialTime = 0;
+    this.levelTransitionTime = 0;
+    this.currentTheme = getThemeForLevel(1);
     this.terrainCacheVersion += 1;
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
@@ -455,7 +502,14 @@ export class Game {
     const levelBonus = this.currentLevel * 500;
     this.score += levelBonus;
     audio.playLevelUp();
+
+    // Start level transition animation
+    this.levelTransitionTime = this.levelTransitionDuration;
+    this.levelTransitionLevel = this.currentLevel;
+    this.currentTheme = getThemeForLevel(this.currentLevel);
+
     this.terrainCacheVersion += 1;
+    this.exhaustParticles = [];
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
       lives: preservedLives,
@@ -473,6 +527,7 @@ export class Game {
     this.screenShakeTime = 0.2;
     this.damageFlash = 0.35;
     this.comboCount = 0;
+    this.streakCount = 0;
     audio.playDamage();
 
     // Haptic feedback
@@ -486,7 +541,16 @@ export class Game {
         this.highScore = this.score;
         saveHighScore(this.score);
       }
+      // Save run to history
+      saveRunToHistory({
+        score: this.score,
+        level: this.currentLevel,
+        streak: this.streakBestThisRun,
+        date: Date.now(),
+      });
       audio.stopEngine();
+      audio.stopMusic();
+      audio.stopProximityTone();
       this.syncMenuVisibility();
       return;
     }
@@ -544,6 +608,14 @@ export class Game {
     if (this.claimFlashTime > 0) {
       this.claimFlashTime = Math.max(0, this.claimFlashTime - dt);
     }
+    if (this.streakFlash > 0) {
+      this.streakFlash = Math.max(0, this.streakFlash - dt);
+    }
+
+    // Level transition timer
+    if (this.levelTransitionTime > 0) {
+      this.levelTransitionTime = Math.max(0, this.levelTransitionTime - dt);
+    }
 
     // Tutorial timer
     if (!this.tutorialShown && this.state.mode === "playing") {
@@ -580,11 +652,20 @@ export class Game {
     this.updateSmoke(dt);
     this.updatePowerups(dt);
     this.updateActivePowerups(dt);
+    this.updateExhaustParticles(dt);
+    this.updateTrailMagnet(dt);
     this.detectDamage();
 
     // Engine audio
     const playerSpeed = Math.hypot(this.state.player.vx, this.state.player.vy) / this.state.player.speed;
     audio.updateEngine(playerSpeed, this.state.nitro.activeSeconds > 0);
+
+    // Dynamic music
+    audio.updateMusic(this.state.claimedPercent);
+
+    // Proximity warning
+    const danger = this.getTrailDangerLevel();
+    audio.updateProximityTone(danger);
 
     if (this.state.player.invuln > 0) {
       this.state.player.invuln = Math.max(0, this.state.player.invuln - dt);
@@ -745,7 +826,21 @@ export class Game {
     // Big claim bonus
     const bigBonus = claimDelta > 0.1 ? 500 : 0;
     this.comboCount += 1;
-    this.addScore(claimPoints + bigBonus);
+    this.streakCount += 1;
+    if (this.streakCount > this.streakBestThisRun) {
+      this.streakBestThisRun = this.streakCount;
+    }
+
+    // Streak reward at milestones (3, 5, 7, 10, 15, 20...)
+    let streakBonus = 0;
+    if (this.streakCount === 3 || this.streakCount === 5 || this.streakCount === 7 ||
+        (this.streakCount >= 10 && this.streakCount % 5 === 0)) {
+      streakBonus = this.streakCount * 100;
+      this.streakFlash = 1.2;
+      audio.playStreak();
+    }
+
+    this.addScore(claimPoints + bigBonus + streakBonus);
 
     audio.playClaim(this.state.claimedPercent);
 
@@ -817,7 +912,6 @@ export class Game {
   }
 
   collectPowerup(pu) {
-    const def = POWERUP_TYPES[pu.type];
     audio.playPickup();
 
     if (this.touchMode && navigator.vibrate) {
@@ -827,6 +921,20 @@ export class Game {
     if (pu.type === "extraLife") {
       this.state.lives += 1;
       this.addScore(200);
+    } else if (pu.type === "bomb") {
+      // Bomb: stun all enemies for 2.5s, clear sparks
+      audio.playBomb();
+      this.screenShake = 0.8;
+      this.screenShakeTime = 0.3;
+      for (const enemy of this.state.enemies) {
+        enemy.stunTimer = 2.5;
+        enemy.preStunVx = enemy.vx;
+        enemy.preStunVy = enemy.vy;
+        enemy.vx = 0;
+        enemy.vy = 0;
+      }
+      this.state.sparks.length = 0;
+      this.addScore(300);
     } else {
       const effect = createActivePowerupEffect(pu.type);
       if (effect) {
@@ -862,6 +970,17 @@ export class Game {
     for (const enemy of this.state.enemies) {
       enemy.spin += dt * 2.2;
       enemy.firePhase += dt * 4.5;
+
+      // Bomb stun
+      if (enemy.stunTimer > 0) {
+        enemy.stunTimer -= dt;
+        if (enemy.stunTimer <= 0) {
+          enemy.vx = enemy.preStunVx || 0;
+          enemy.vy = enemy.preStunVy || 0;
+          enemy.stunTimer = 0;
+        }
+        continue;
+      }
 
       // Tracker variant: nudge toward player
       if (enemy.variant === "tracker") {
@@ -1091,8 +1210,10 @@ export class Game {
     const { enemies, player, trailMask } = this.state;
     const shielded = this.hasActivePowerup("shield");
 
+    // Skip damage from stunned enemies
     if (player.invuln <= 0 && !shielded) {
       for (const enemy of enemies) {
+        if (enemy.stunTimer > 0) continue;
         const dx = enemy.x - player.x;
         const dy = enemy.y - player.y;
         const minDist = enemy.radius + player.radius;
@@ -1105,8 +1226,73 @@ export class Game {
 
     if (player.trailActive && !shielded) {
       for (const enemy of enemies) {
+        if (enemy.stunTimer > 0) continue;
         if (circleIntersectsMask(trailMask, cols, rows, config.cell, enemy.x, enemy.y, enemy.radius)) {
           this.loseLife();
+          return;
+        }
+      }
+    }
+  }
+
+  /** Exhaust trail particles from car */
+  updateExhaustParticles(dt) {
+    const { player } = this.state;
+    const speed = Math.hypot(player.vx, player.vy);
+
+    // Spawn exhaust when moving
+    if (speed > 20 && this.exhaustParticles.length < 60) {
+      const tailAngle = player.angle + Math.PI;
+      const spawnX = player.x + Math.cos(tailAngle) * player.radius * 0.8;
+      const spawnY = player.y + Math.sin(tailAngle) * player.radius * 0.8;
+      this.exhaustParticles.push({
+        x: spawnX + (Math.random() - 0.5) * 4,
+        y: spawnY + (Math.random() - 0.5) * 4,
+        vx: Math.cos(tailAngle) * (20 + Math.random() * 30),
+        vy: Math.sin(tailAngle) * (20 + Math.random() * 30) - 8,
+        life: 0,
+        maxLife: 0.3 + Math.random() * 0.3,
+        size: 2 + Math.random() * 3,
+      });
+    }
+
+    // Update particles
+    let write = 0;
+    for (let i = 0; i < this.exhaustParticles.length; i++) {
+      const p = this.exhaustParticles[i];
+      p.life += dt;
+      if (p.life >= p.maxLife) continue;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.95;
+      p.vy *= 0.95;
+      p.size += dt * 4;
+      this.exhaustParticles[write] = p;
+      write++;
+    }
+    this.exhaustParticles.length = write;
+  }
+
+  /** Trail magnet: auto-close trail when near claimed territory */
+  updateTrailMagnet(dt) {
+    if (!this.hasActivePowerup("trailMagnet")) return;
+    if (!this.state.player.trailActive || this.state.trailCells.length < 3) return;
+
+    const { player, claimed } = this.state;
+    const col = toCell(player.x, config.cell, cols - 1);
+    const row = toCell(player.y, config.cell, rows - 1);
+
+    // Check if any neighboring cell (within 2 cells) is claimed
+    for (let dr = -2; dr <= 2; dr++) {
+      for (let dc = -2; dc <= 2; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nc = col + dc;
+        const nr = row + dr;
+        if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+        const idx = cellToIndex(nc, nr, cols);
+        if (claimed[idx]) {
+          // Near a wall - auto close
+          this.closeTrailAndClaim();
           return;
         }
       }
@@ -1158,6 +1344,14 @@ export class Game {
       tutorialShown: this.tutorialShown,
       tutorialTime: this.tutorialTime,
       terrainCacheVersion: this.terrainCacheVersion,
+      theme: this.currentTheme,
+      levelTransitionTime: this.levelTransitionTime,
+      levelTransitionDuration: this.levelTransitionDuration,
+      levelTransitionLevel: this.levelTransitionLevel,
+      streakCount: this.streakCount,
+      streakFlash: this.streakFlash,
+      exhaustParticles: this.exhaustParticles,
+      runHistory: loadRunHistory(),
     };
 
     if (this.rotateForPortrait) {

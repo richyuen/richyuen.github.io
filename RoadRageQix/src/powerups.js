@@ -6,6 +6,8 @@ export const POWERUP_TYPES = {
   slow: { label: "SLOW", color: "#cc88ff", duration: 4, icon: "~" },
   extraLife: { label: "+1 LIFE", color: "#ff4488", duration: 0, icon: "+" },
   scoreMulti: { label: "2x SCORE", color: "#ffdd44", duration: 6, icon: "x" },
+  bomb: { label: "BOMB", color: "#ff6622", duration: 0, icon: "B" },
+  trailMagnet: { label: "MAGNET", color: "#88ffee", duration: 5, icon: "M" },
 };
 
 const typeKeys = Object.keys(POWERUP_TYPES);
