@@ -1036,6 +1036,54 @@ function drawStunnedEffect(ctx, enemy, elapsedSeconds) {
   ctx.restore();
 }
 
+function drawTireTrackGhosts(ctx, ghosts) {
+  if (!ghosts || ghosts.length < 2) return;
+  ctx.save();
+  for (let i = 0; i < ghosts.length; i++) {
+    const g = ghosts[i];
+    const alpha = Math.max(0, 1 - g.age / 2.5) * 0.2;
+    if (alpha < 0.01) continue;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(180, 150, 100, 0.5)";
+    // Two tire marks offset from center
+    const cos = Math.cos(g.angle);
+    const sin = Math.sin(g.angle);
+    const offX = sin * 4;
+    const offY = -cos * 4;
+    ctx.fillRect(g.x + offX - 1.5, g.y + offY - 1.5, 3, 3);
+    ctx.fillRect(g.x - offX - 1.5, g.y - offY - 1.5, 3, 3);
+  }
+  ctx.restore();
+}
+
+function drawBossHPBar(ctx, enemy) {
+  const barW = enemy.radius * 2.5;
+  const barH = 6;
+  const x = enemy.x - barW * 0.5;
+  const y = enemy.y - enemy.radius - 18;
+  const fill = (enemy.bossHP || 0) / (enemy.bossMaxHP || 1);
+
+  ctx.save();
+  // Background
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+  ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
+  // HP bar
+  const hpColor = fill > 0.5 ? "#ffaa00" : fill > 0.25 ? "#ff6622" : "#ff2222";
+  ctx.fillStyle = hpColor;
+  ctx.fillRect(x, y, barW * fill, barH);
+  // Border
+  ctx.strokeStyle = "rgba(255, 200, 100, 0.7)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - 1, y - 1, barW + 2, barH + 2);
+  // Label
+  ctx.fillStyle = "#fff";
+  ctx.font = '700 9px "Impact", sans-serif';
+  ctx.textAlign = "center";
+  ctx.fillText("BOSS", enemy.x, y - 3);
+  ctx.textAlign = "left";
+  ctx.restore();
+}
+
 function drawWeatherParticles(ctx, particles, theme, elapsedSeconds) {
   if (!particles || particles.length === 0) return;
   const weather = theme?.weather;
@@ -1091,27 +1139,64 @@ function drawEnemyExplosions(ctx, explosions, canvasWidth, canvasHeight, worldOf
   ctx.save();
   for (const e of explosions) {
     const progress = 1 - e.time / e.maxTime;
-    const screenX = worldOffsetX + e.x * viewScale;
-    const screenY = worldOffsetY + e.y * viewScale;
-    const maxRadius = Math.min(canvasWidth, canvasHeight) * 0.35;
-    const radius = e.radius * viewScale + progress * maxRadius;
+    // "Fly towards camera" - starts at world pos, moves to screen center, scales up
+    const screenX0 = worldOffsetX + e.x * viewScale;
+    const screenY0 = worldOffsetY + e.y * viewScale;
+    const centerX = canvasWidth * 0.5;
+    const centerY = canvasHeight * 0.5;
+    // Ease towards center
+    const ease = progress * progress;
+    const screenX = screenX0 + (centerX - screenX0) * ease * 0.4;
+    const screenY = screenY0 + (centerY - screenY0) * ease * 0.4;
+    // Scale grows dramatically - starts at enemy size, fills ~40% of screen
+    const maxRadius = Math.min(canvasWidth, canvasHeight) * 0.4;
+    const flyScale = 1 + ease * 8;
+    const radius = e.radius * viewScale * flyScale;
+    const clampedRadius = Math.min(radius, maxRadius);
 
-    ctx.globalAlpha = (1 - progress) * 0.35;
-    const grad = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, radius);
+    // Semi-transparent so play area is visible
+    ctx.globalAlpha = (1 - progress) * 0.4;
+
+    // Outer explosion glow
+    const grad = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, clampedRadius);
     grad.addColorStop(0, e.color || "#ff6622");
-    grad.addColorStop(0.3, "rgba(255, 160, 60, 0.6)");
-    grad.addColorStop(0.7, "rgba(255, 80, 20, 0.2)");
+    grad.addColorStop(0.25, "rgba(255, 180, 60, 0.7)");
+    grad.addColorStop(0.6, "rgba(255, 80, 20, 0.3)");
     grad.addColorStop(1, "rgba(255, 40, 10, 0)");
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
+    ctx.arc(screenX, screenY, clampedRadius, 0, Math.PI * 2);
     ctx.fill();
 
+    // Spinning spike silhouette (enemy shape flying at you)
+    const spikeCount = e.spikeCount || 12;
+    const spinAngle = (e.spinAngle || 0) + progress * 6;
+    const spikeRadius = clampedRadius * 0.5;
+    if (progress < 0.7) {
+      ctx.globalAlpha = (1 - progress / 0.7) * 0.3;
+      ctx.fillStyle = "rgba(40, 20, 10, 0.6)";
+      ctx.beginPath();
+      for (let i = 0; i < spikeCount; i++) {
+        const a = spinAngle + (i / spikeCount) * Math.PI * 2;
+        const inner = spikeRadius * 0.5;
+        const outer = spikeRadius * (0.9 + (i % 2) * 0.2);
+        const midA = a + Math.PI / spikeCount;
+        if (i === 0) {
+          ctx.moveTo(screenX + Math.cos(a) * outer, screenY + Math.sin(a) * outer);
+        } else {
+          ctx.lineTo(screenX + Math.cos(a) * outer, screenY + Math.sin(a) * outer);
+        }
+        ctx.lineTo(screenX + Math.cos(midA) * inner, screenY + Math.sin(midA) * inner);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+
     // Inner bright flash
-    ctx.globalAlpha = (1 - progress) * 0.5 * Math.max(0, 1 - progress * 3);
+    ctx.globalAlpha = (1 - progress) * 0.6 * Math.max(0, 1 - progress * 2.5);
     ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.arc(screenX, screenY, radius * 0.15, 0, Math.PI * 2);
+    ctx.arc(screenX, screenY, clampedRadius * 0.12, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
@@ -1331,7 +1416,12 @@ export function renderWorld(ctx, game) {
     terrainCacheVersion = cacheVersion;
   }
   if (cachedTerrainCanvas) {
+    // Territory pulse: subtle breathing effect
+    ctx.save();
+    const pulse = 0.96 + Math.sin(elapsedSeconds * 1.8) * 0.04;
+    ctx.globalAlpha = pulse;
     ctx.drawImage(cachedTerrainCanvas, 0, 0);
+    ctx.restore();
   }
 
   // Bonus zones (draw before trail so trail overlays them)
@@ -1377,11 +1467,55 @@ export function renderWorld(ctx, game) {
   // Powerups
   drawPowerups(ctx, state.powerups ?? [], elapsedSeconds);
 
+  // Tire track ghosts
+  drawTireTrackGhosts(ctx, game.tireTrackGhosts);
+
   const shielded = (state.activePowerups ?? []).some(p => p.type === "shield");
   drawCar(ctx, state.player, elapsedSeconds, shielded, carSkin);
 
+  // Boss HP bars
+  for (const enemy of enemies) {
+    if (!enemy.dead && enemy.variant === "boss" && enemy.bossHP != null) {
+      drawBossHPBar(ctx, enemy);
+    }
+  }
+
   // Weather particles (world-space)
   drawWeatherParticles(ctx, game.weatherParticles, game.theme, elapsedSeconds);
+
+  // Screen-space reflection for Frostbite/Midnight (water-like shimmer on lower third)
+  const weather = theme?.weather;
+  if (weather === "rain" || weather === "snow") {
+    const reflY = worldHeight * 0.68;
+    const reflH = worldHeight - reflY;
+    // Shimmering water-like gradient
+    ctx.save();
+    ctx.globalAlpha = 0.06 + Math.sin(elapsedSeconds * 0.7) * 0.02;
+    const reflGrad = ctx.createLinearGradient(0, reflY, 0, worldHeight);
+    const reflColor = weather === "snow" ? "rgba(180, 220, 255," : "rgba(100, 150, 220,";
+    reflGrad.addColorStop(0, reflColor + "0)");
+    reflGrad.addColorStop(0.3, reflColor + "0.4)");
+    reflGrad.addColorStop(1, reflColor + "0.15)");
+    ctx.fillStyle = reflGrad;
+    ctx.fillRect(0, reflY, worldWidth, reflH);
+    ctx.restore();
+    // Animated ripple lines
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    ctx.strokeStyle = weather === "snow" ? "rgba(200, 235, 255, 0.5)" : "rgba(130, 180, 240, 0.5)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 8; i++) {
+      const ry = reflY + (i + 1) * (reflH / 9);
+      ctx.beginPath();
+      for (let x = 0; x < worldWidth; x += 6) {
+        const wave = Math.sin(elapsedSeconds * 2.5 + x * 0.02 + i * 1.3) * 2.5;
+        if (x === 0) ctx.moveTo(x, ry + wave);
+        else ctx.lineTo(x, ry + wave);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   ctx.strokeStyle = "rgba(255, 210, 159, 0.45)";
   ctx.lineWidth = 2;
