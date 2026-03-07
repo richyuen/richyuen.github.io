@@ -469,7 +469,7 @@ function drawEnemy(ctx, enemy, elapsedSeconds) {
   ctx.restore();
 }
 
-function drawCar(ctx, player, elapsedSeconds, shielded) {
+function drawCar(ctx, player, elapsedSeconds, shielded, skin) {
   ctx.save();
   ctx.translate(player.x, player.y);
   ctx.rotate(player.angle);
@@ -479,6 +479,8 @@ function drawCar(ctx, player, elapsedSeconds, shielded) {
 
   const bodyW = 36;
   const bodyH = 20;
+  const bodyColor = skin?.body || "#82311d";
+  const accentColor = skin?.accent || "#5f2617";
 
   if (player.invuln > 0) {
     ctx.globalAlpha = 0.7 + Math.sin(elapsedSeconds * 30) * 0.2;
@@ -501,7 +503,7 @@ function drawCar(ctx, player, elapsedSeconds, shielded) {
   ctx.fillStyle = "#181615";
   ctx.fillRect(-bodyW * 0.36, -bodyH * 0.72, bodyW * 0.72, bodyH * 1.44);
 
-  ctx.fillStyle = "#82311d";
+  ctx.fillStyle = bodyColor;
   ctx.beginPath();
   ctx.moveTo(-bodyW * 0.5, -bodyH * 0.38);
   ctx.lineTo(bodyW * 0.44, -bodyH * 0.48);
@@ -511,7 +513,7 @@ function drawCar(ctx, player, elapsedSeconds, shielded) {
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = "#5f2617";
+  ctx.fillStyle = accentColor;
   ctx.fillRect(-7, -6, 18, 12);
   ctx.fillStyle = "#2f2f2f";
   ctx.fillRect(-2, -5, 10, 10);
@@ -798,6 +800,128 @@ function drawRunHistory(ctx, canvasWidth, canvasHeight, runHistory) {
   ctx.restore();
 }
 
+function drawBurnZones(ctx, burnZones, config, elapsedSeconds) {
+  if (!burnZones || burnZones.length === 0) return;
+  const { cell } = config;
+  const cols = Math.floor(config.worldWidth / cell);
+  ctx.save();
+  for (const bz of burnZones) {
+    const col = bz.idx % cols;
+    const row = Math.floor(bz.idx / cols);
+    const x = col * cell;
+    const y = row * cell;
+    const alpha = Math.min(1, bz.timeLeft / 0.5) * 0.6;
+    const flicker = 0.8 + Math.sin(elapsedSeconds * 15 + bz.idx) * 0.2;
+    ctx.globalAlpha = alpha * flicker;
+    ctx.fillStyle = "#ff4400";
+    ctx.fillRect(x, y, cell, cell);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = `rgba(255, 200, 50, ${alpha * 0.4})`;
+    ctx.fillRect(x - 1, y - 1, cell + 2, cell + 2);
+    ctx.globalCompositeOperation = "source-over";
+  }
+  ctx.restore();
+}
+
+function drawClaimParticles(ctx, particles) {
+  if (!particles || particles.length === 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const p of particles) {
+    const age = p.life / p.maxLife;
+    const alpha = (1 - age) * 0.8;
+    if (alpha <= 0.01) continue;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = `hsl(${p.hue}, 100%, ${60 + age * 20}%)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (1 - age * 0.5), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawShockwaves(ctx, shockwaves) {
+  if (!shockwaves || shockwaves.length === 0) return;
+  ctx.save();
+  for (const sw of shockwaves) {
+    const age = sw.life / sw.maxLife;
+    const alpha = (1 - age) * 0.6;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = sw.color || "#ff6622";
+    ctx.lineWidth = 3 * (1 - age);
+    ctx.beginPath();
+    ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCRTFilter(ctx, canvasWidth, canvasHeight) {
+  ctx.save();
+  // Scanlines
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = "#000";
+  for (let y = 0; y < canvasHeight; y += 3) {
+    ctx.fillRect(0, y, canvasWidth, 1);
+  }
+  // Vignette
+  ctx.globalAlpha = 1;
+  const g = ctx.createRadialGradient(
+    canvasWidth / 2, canvasHeight / 2, canvasWidth * 0.3,
+    canvasWidth / 2, canvasHeight / 2, canvasWidth * 0.75
+  );
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.25)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+  // Subtle RGB shift
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.015;
+  ctx.fillStyle = "#ff0000";
+  ctx.fillRect(1, 0, canvasWidth, canvasHeight);
+  ctx.fillStyle = "#0000ff";
+  ctx.fillRect(-1, 0, canvasWidth, canvasHeight);
+  ctx.restore();
+}
+
+function drawKillCamEffect(ctx, canvasWidth, canvasHeight, killCamTime) {
+  if (killCamTime <= 0) return;
+  const alpha = killCamTime / 0.3;
+  ctx.save();
+  // Radial blur effect (simulated with semi-transparent overlay)
+  const g = ctx.createRadialGradient(
+    canvasWidth / 2, canvasHeight / 2, canvasWidth * 0.1,
+    canvasWidth / 2, canvasHeight / 2, canvasWidth * 0.6
+  );
+  g.addColorStop(0, `rgba(60, 10, 10, 0)`);
+  g.addColorStop(1, `rgba(60, 10, 10, ${0.3 * alpha})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+  // "SLOW-MO" text flash
+  ctx.globalAlpha = alpha * 0.5;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ff4444";
+  ctx.font = '700 20px "Impact", sans-serif';
+  ctx.fillText("SLOW-MO", canvasWidth / 2, canvasHeight / 2 + 60);
+  ctx.textAlign = "left";
+  ctx.restore();
+}
+
+function drawAchievementFlash(ctx, canvasWidth, flash) {
+  if (!flash) return;
+  const alpha = Math.min(1, flash.time / 0.5, (3 - (3 - flash.time)) > 2 ? (3 - flash.time) : 1);
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, flash.time < 0.5 ? flash.time / 0.5 : flash.time > 2.5 ? (3 - flash.time) / 0.5 : 1) * 0.9;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(8, 7, 6, 0.7)";
+  ctx.fillRect(canvasWidth / 2 - 150, 70, 300, 40);
+  ctx.fillStyle = "#ffdd44";
+  ctx.font = '700 18px "Impact", sans-serif';
+  ctx.fillText(`ACHIEVEMENT: ${flash.name}`, canvasWidth / 2, 96);
+  ctx.textAlign = "left";
+  ctx.restore();
+}
+
 function drawStunnedEffect(ctx, enemy, elapsedSeconds) {
   if (!enemy.stunTimer || enemy.stunTimer <= 0) return;
   ctx.save();
@@ -993,6 +1117,10 @@ export function renderWorld(ctx, game) {
     claimFlashTime,
     theme,
     exhaustParticles,
+    burnZones,
+    claimParticles,
+    shockwaves,
+    carSkin,
   } = game;
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -1022,20 +1150,31 @@ export function renderWorld(ctx, game) {
   drawTrail(ctx, state, config, elapsedSeconds, trailDanger || 0, highContrastMode);
   drawClaimFlash(ctx, claimFlashCells, claimFlashTime, config);
 
+  // Burn zones
+  drawBurnZones(ctx, burnZones, config, elapsedSeconds);
+
   // Exhaust particles
   drawExhaustParticles(ctx, exhaustParticles);
 
   drawSmoke(ctx, state.smoke, elapsedSeconds);
   drawSparks(ctx, state.sparks, elapsedSeconds);
 
+  // Claim particles
+  drawClaimParticles(ctx, claimParticles);
+
   const enemies = state.enemies ?? (state.enemy ? [state.enemy] : []);
   for (const enemy of enemies) {
+    if (enemy.dead) continue; // Don't render dead enemies
     drawEnemy(ctx, enemy, elapsedSeconds);
     drawStunnedEffect(ctx, enemy, elapsedSeconds);
   }
 
-  // Enemy warning indicators
-  drawEnemyWarningIndicators(ctx, enemies, state.player, worldWidth, worldHeight);
+  // Shockwave rings
+  drawShockwaves(ctx, shockwaves);
+
+  // Enemy warning indicators (skip dead)
+  const aliveEnemies = enemies.filter(e => !e.dead);
+  drawEnemyWarningIndicators(ctx, aliveEnemies, state.player, worldWidth, worldHeight);
 
   // Edges from cache
   if (cachedEdgeCanvas) {
@@ -1049,7 +1188,7 @@ export function renderWorld(ctx, game) {
   drawPowerups(ctx, state.powerups ?? [], elapsedSeconds);
 
   const shielded = (state.activePowerups ?? []).some(p => p.type === "shield");
-  drawCar(ctx, state.player, elapsedSeconds, shielded);
+  drawCar(ctx, state.player, elapsedSeconds, shielded, carSkin);
 
   ctx.strokeStyle = "rgba(255, 210, 159, 0.45)";
   ctx.lineWidth = 2;
@@ -1077,6 +1216,11 @@ export function renderOverlay(ctx, game) {
     streakCount,
     streakFlash,
     runHistory,
+    killCamTime,
+    crtEnabled,
+    achievementFlash,
+    unlockedAchievements,
+    cumulativeScore,
   } = game;
   const restartPrompt = touchMode ? "Tap Ignition to restart" : "Press Space to restart";
 
@@ -1096,6 +1240,21 @@ export function renderOverlay(ctx, game) {
   } else if (state.mode === "lost") {
     drawEndMessage(ctx, canvasWidth, canvasHeight, false, restartPrompt, score || 0, highScore || 0);
     drawRunHistory(ctx, canvasWidth, canvasHeight, runHistory);
+    // Show unlocked achievements on death screen
+    if (unlockedAchievements && unlockedAchievements.length > 0) {
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(244, 220, 193, 0.5)";
+      ctx.font = '500 11px "Bahnschrift", "Segoe UI", sans-serif';
+      ctx.fillText(`Badges: ${unlockedAchievements.join(", ")}`, canvasWidth / 2, canvasHeight / 2 + 195);
+      ctx.textAlign = "left";
+      ctx.restore();
+    }
+  }
+
+  // Kill cam effect
+  if (killCamTime > 0) {
+    drawKillCamEffect(ctx, canvasWidth, canvasHeight, killCamTime);
   }
 
   // Damage flash (screen-space)
@@ -1103,9 +1262,17 @@ export function renderOverlay(ctx, game) {
     drawDamageFlash(ctx, canvasWidth, canvasHeight, damageFlash);
   }
 
+  // Achievement flash
+  drawAchievementFlash(ctx, canvasWidth, achievementFlash);
+
   // Level transition animation
   if (levelTransitionTime > 0) {
     drawLevelTransition(ctx, canvasWidth, canvasHeight, levelTransitionTime, levelTransitionDuration || 1.8, levelTransitionLevel || 1, theme?.name);
+  }
+
+  // CRT filter (always last)
+  if (crtEnabled) {
+    drawCRTFilter(ctx, canvasWidth, canvasHeight);
   }
 
   // Pause overlay

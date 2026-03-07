@@ -206,8 +206,30 @@ function floodFromEnemies(claimed, enemies) {
   return floodBuffer;
 }
 
+/** Car skins */
+export const CAR_SKINS = [
+  { id: "default", name: "Rusty Red", body: "#82311d", accent: "#5f2617", threshold: 0 },
+  { id: "chrome", name: "Chrome", body: "#888899", accent: "#666677", threshold: 5000 },
+  { id: "midnight", name: "Midnight", body: "#223355", accent: "#112244", threshold: 15000 },
+  { id: "toxic", name: "Toxic Green", body: "#22aa66", accent: "#118844", threshold: 30000 },
+  { id: "gold", name: "Gold Rush", body: "#ddaa33", accent: "#bb8822", threshold: 50000 },
+];
+
+/** Achievements */
+export const ACHIEVEMENTS = [
+  { id: "first_claim", name: "First Blood", desc: "Claim 25% territory", icon: "T" },
+  { id: "daredevil", name: "Daredevil", desc: "10-claim streak", icon: "D" },
+  { id: "speedrunner", name: "Speedrunner", desc: "Clear level in <30s", icon: "S" },
+  { id: "survivor", name: "Survivor", desc: "Reach level 5", icon: "V" },
+  { id: "bomb_squad", name: "Bomb Squad", desc: "Use 3 bombs in one run", icon: "B" },
+  { id: "territory_master", name: "Land Grab", desc: "Claim >15% in one trail", icon: "L" },
+];
+
 /** Score helpers */
 const SCORE_STORAGE_KEY = "roadrageqix_highscore";
+const CUMULATIVE_SCORE_KEY = "roadrageqix_cumulative";
+const ACHIEVEMENTS_KEY = "roadrageqix_achievements";
+const SELECTED_SKIN_KEY = "roadrageqix_skin";
 
 function loadHighScore() {
   try {
@@ -241,6 +263,28 @@ function saveRunToHistory(run) {
     if (history.length > 10) history.length = 10;
     localStorage.setItem(RUN_HISTORY_KEY, JSON.stringify(history));
   } catch {}
+}
+
+function loadCumulativeScore() {
+  try { return parseInt(localStorage.getItem(CUMULATIVE_SCORE_KEY), 10) || 0; } catch { return 0; }
+}
+function saveCumulativeScore(score) {
+  try { localStorage.setItem(CUMULATIVE_SCORE_KEY, String(score)); } catch {}
+}
+function loadUnlockedAchievements() {
+  try { return JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY)) || []; } catch { return []; }
+}
+function saveAchievement(id) {
+  try {
+    const list = loadUnlockedAchievements();
+    if (!list.includes(id)) { list.push(id); localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(list)); }
+  } catch {}
+}
+function loadSelectedSkin() {
+  try { return localStorage.getItem(SELECTED_SKIN_KEY) || "default"; } catch { return "default"; }
+}
+function saveSelectedSkin(id) {
+  try { localStorage.setItem(SELECTED_SKIN_KEY, id); } catch {}
 }
 
 export class Game {
@@ -304,6 +348,35 @@ export class Game {
     // Exhaust particles
     this.exhaustParticles = [];
 
+    // Burn zones (enemy trail fire)
+    this.burnZones = [];
+
+    // Territory decay timer
+    this.decayTimer = 0;
+
+    // Kill cam
+    this.killCamTime = 0;
+    this.killCamPending = false;
+
+    // Claim particles
+    this.claimParticles = [];
+
+    // Shockwave rings from bomb
+    this.shockwaves = [];
+
+    // CRT filter
+    this.crtEnabled = false;
+
+    // Car skin
+    this.selectedSkin = loadSelectedSkin();
+    this.cumulativeScore = loadCumulativeScore();
+
+    // Achievements
+    this.unlockedAchievements = loadUnlockedAchievements();
+    this.achievementFlash = null; // { id, name, time }
+    this.bombsUsedThisRun = 0;
+    this.levelStartTime = 0;
+
     // Terrain cache version (incremented to invalidate render cache)
     this.terrainCacheVersion = 0;
 
@@ -338,6 +411,35 @@ export class Game {
 
   setTouchMode(enabled) {
     this.touchMode = Boolean(enabled);
+  }
+
+  toggleCRT() {
+    this.crtEnabled = !this.crtEnabled;
+    return this.crtEnabled;
+  }
+
+  cycleCarSkin() {
+    const unlocked = CAR_SKINS.filter(s => s.threshold <= this.cumulativeScore);
+    const currentIdx = unlocked.findIndex(s => s.id === this.selectedSkin);
+    const nextIdx = (currentIdx + 1) % unlocked.length;
+    this.selectedSkin = unlocked[nextIdx].id;
+    saveSelectedSkin(this.selectedSkin);
+    return this.selectedSkin;
+  }
+
+  getCarSkin() {
+    return CAR_SKINS.find(s => s.id === this.selectedSkin) || CAR_SKINS[0];
+  }
+
+  checkAchievement(id) {
+    if (this.unlockedAchievements.includes(id)) return;
+    saveAchievement(id);
+    this.unlockedAchievements = loadUnlockedAchievements();
+    const def = ACHIEVEMENTS.find(a => a.id === id);
+    if (def) {
+      this.achievementFlash = { id, name: def.name, time: 3 };
+      audio.playAnnouncerAchievement();
+    }
   }
 
   toggleHighContrast() {
@@ -460,11 +562,13 @@ export class Game {
     audio.startEngine();
     audio.startMusic();
     audio.startProximityTone();
+    audio.startReverb();
     setTimeout(() => {
       audio.startAmbient();
       audio.startEngine();
       audio.startMusic();
       audio.startProximityTone();
+      audio.startReverb();
     }, 150);
     this.currentLevel = 1;
     this.currentEnemyCount = this.selectedEnemyCount;
@@ -475,6 +579,14 @@ export class Game {
     this.streakFlash = 0;
     this.streakBestThisRun = 0;
     this.exhaustParticles = [];
+    this.burnZones = [];
+    this.claimParticles = [];
+    this.shockwaves = [];
+    this.killCamTime = 0;
+    this.killCamPending = false;
+    this.bombsUsedThisRun = 0;
+    this.levelStartTime = 0;
+    this.decayTimer = 0;
     this.paused = false;
     this.tutorialShown = false;
     this.tutorialTime = 0;
@@ -495,6 +607,11 @@ export class Game {
   }
 
   advanceLevel() {
+    // Speedrunner achievement: level cleared in <30s
+    if (this.levelStartTime > 0 && (this.elapsedSeconds - this.levelStartTime) < 30) {
+      this.checkAchievement("speedrunner");
+    }
+
     this.currentLevel += 1;
     this.currentEnemyCount += 1;
     const preservedLives = this.state.lives;
@@ -502,6 +619,10 @@ export class Game {
     const levelBonus = this.currentLevel * 500;
     this.score += levelBonus;
     audio.playLevelUp();
+    audio.playAnnouncerLevelUp();
+
+    // Survivor achievement
+    if (this.currentLevel >= 5) this.checkAchievement("survivor");
 
     // Start level transition animation
     this.levelTransitionTime = this.levelTransitionDuration;
@@ -510,6 +631,10 @@ export class Game {
 
     this.terrainCacheVersion += 1;
     this.exhaustParticles = [];
+    this.burnZones = [];
+    this.claimParticles = [];
+    this.levelStartTime = this.elapsedSeconds;
+    this.decayTimer = 0;
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
       lives: preservedLives,
@@ -528,6 +653,10 @@ export class Game {
     this.damageFlash = 0.35;
     this.comboCount = 0;
     this.streakCount = 0;
+
+    // Kill cam slow-mo
+    this.killCamTime = 0.3;
+
     audio.playDamage();
 
     // Haptic feedback
@@ -541,6 +670,9 @@ export class Game {
         this.highScore = this.score;
         saveHighScore(this.score);
       }
+      // Update cumulative score
+      this.cumulativeScore += this.score;
+      saveCumulativeScore(this.cumulativeScore);
       // Save run to history
       saveRunToHistory({
         score: this.score,
@@ -551,6 +683,7 @@ export class Game {
       audio.stopEngine();
       audio.stopMusic();
       audio.stopProximityTone();
+      audio.stopReverb();
       this.syncMenuVisibility();
       return;
     }
@@ -645,30 +778,54 @@ export class Game {
       return;
     }
 
-    this.updateNitro(dt, input);
-    this.updatePlayer(dt, input);
-    this.updateEnemies(dt);
-    this.updateSparks(dt);
-    this.updateSmoke(dt);
-    this.updatePowerups(dt);
-    this.updateActivePowerups(dt);
-    this.updateExhaustParticles(dt);
-    this.updateTrailMagnet(dt);
+    // Kill cam slow-mo
+    let effectiveDt = dt;
+    if (this.killCamTime > 0) {
+      this.killCamTime = Math.max(0, this.killCamTime - dt);
+      effectiveDt = dt * 0.15;
+    }
+
+    // Achievement flash timer
+    if (this.achievementFlash) {
+      this.achievementFlash.time -= dt;
+      if (this.achievementFlash.time <= 0) this.achievementFlash = null;
+    }
+
+    this.updateNitro(effectiveDt, input);
+    this.updatePlayer(effectiveDt, input);
+    this.updateEnemies(effectiveDt);
+    this.updateSparks(effectiveDt);
+    this.updateSmoke(effectiveDt);
+    this.updatePowerups(effectiveDt);
+    this.updateActivePowerups(effectiveDt);
+    this.updateExhaustParticles(effectiveDt);
+    this.updateTrailMagnet(effectiveDt);
+    this.updateBurnZones(effectiveDt);
+    this.updateTerritoryDecay(effectiveDt);
+    this.updateClaimParticles(effectiveDt);
+    this.updateShockwaves(effectiveDt);
     this.detectDamage();
 
     // Engine audio
     const playerSpeed = Math.hypot(this.state.player.vx, this.state.player.vy) / this.state.player.speed;
     audio.updateEngine(playerSpeed, this.state.nitro.activeSeconds > 0);
 
-    // Dynamic music
+    // Dynamic music + reverb
     audio.updateMusic(this.state.claimedPercent);
+    audio.updateReverb(this.state.claimedPercent);
 
-    // Proximity warning
+    // Proximity warning + announcer danger
     const danger = this.getTrailDangerLevel();
     audio.updateProximityTone(danger);
+    if (danger > 0.8 && !this._dangerAnnounced) {
+      audio.playAnnouncerDanger();
+      this._dangerAnnounced = true;
+    } else if (danger < 0.5) {
+      this._dangerAnnounced = false;
+    }
 
     if (this.state.player.invuln > 0) {
-      this.state.player.invuln = Math.max(0, this.state.player.invuln - dt);
+      this.state.player.invuln = Math.max(0, this.state.player.invuln - effectiveDt);
     }
   }
 
@@ -820,13 +977,23 @@ export class Game {
     // Claim animation timer
     this.claimFlashTime = 0.4;
 
+    // Spawn claim particles along new edge segments
+    this.spawnClaimParticles();
+
     // Score for claim
     const claimDelta = this.state.claimedPercent - prevPercent;
     const claimPoints = Math.round(claimDelta * 10000);
     // Big claim bonus
     const bigBonus = claimDelta > 0.1 ? 500 : 0;
+    // Ricochet claim: nitro active = 10% bonus
+    const nitroBonus = this.state.nitro.activeSeconds > 0 ? Math.round(claimPoints * 0.1) : 0;
     this.comboCount += 1;
     this.streakCount += 1;
+
+    // Achievement checks
+    if (this.state.claimedPercent >= 0.25) this.checkAchievement("first_claim");
+    if (this.streakCount >= 10) this.checkAchievement("daredevil");
+    if (claimDelta > 0.15) this.checkAchievement("territory_master");
     if (this.streakCount > this.streakBestThisRun) {
       this.streakBestThisRun = this.streakCount;
     }
@@ -838,9 +1005,10 @@ export class Game {
       streakBonus = this.streakCount * 100;
       this.streakFlash = 1.2;
       audio.playStreak();
+      audio.playAnnouncerStreak();
     }
 
-    this.addScore(claimPoints + bigBonus + streakBonus);
+    this.addScore(claimPoints + bigBonus + streakBonus + nitroBonus);
 
     audio.playClaim(this.state.claimedPercent);
 
@@ -922,18 +1090,21 @@ export class Game {
       this.state.lives += 1;
       this.addScore(200);
     } else if (pu.type === "bomb") {
-      // Bomb: stun all enemies for 2.5s, clear sparks
+      // Bomb: kill all enemies (respawn after 5s), clear sparks
       audio.playBomb();
       this.screenShake = 0.8;
       this.screenShakeTime = 0.3;
       for (const enemy of this.state.enemies) {
-        enemy.stunTimer = 2.5;
-        enemy.preStunVx = enemy.vx;
-        enemy.preStunVy = enemy.vy;
+        // Shockwave ring per enemy
+        this.shockwaves.push({ x: enemy.x, y: enemy.y, radius: 0, maxRadius: enemy.radius * 4, life: 0, maxLife: 0.5, color: enemy.variantColor || "#ff6622" });
+        enemy.dead = true;
+        enemy.respawnTimer = 5;
         enemy.vx = 0;
         enemy.vy = 0;
       }
       this.state.sparks.length = 0;
+      this.bombsUsedThisRun += 1;
+      if (this.bombsUsedThisRun >= 3) this.checkAchievement("bomb_squad");
       this.addScore(300);
     } else {
       const effect = createActivePowerupEffect(pu.type);
@@ -971,7 +1142,28 @@ export class Game {
       enemy.spin += dt * 2.2;
       enemy.firePhase += dt * 4.5;
 
-      // Bomb stun
+      // Dead enemy respawn
+      if (enemy.dead) {
+        enemy.respawnTimer -= dt;
+        if (enemy.respawnTimer <= 0) {
+          enemy.dead = false;
+          // Respawn at random open cell
+          const open = findNearestOpenCell(this.state.claimed, Math.floor(cols / 2), Math.floor(rows / 2));
+          if (open !== null) {
+            const col = open % cols;
+            const row = Math.floor(open / cols);
+            enemy.x = (col + 0.5) * config.cell;
+            enemy.y = (row + 0.5) * config.cell;
+          }
+          const angle = Math.random() * Math.PI * 2;
+          const spd = config.enemySpeedMin;
+          enemy.vx = Math.cos(angle) * spd;
+          enemy.vy = Math.sin(angle) * spd;
+        }
+        continue;
+      }
+
+      // Bomb stun (legacy compat)
       if (enemy.stunTimer > 0) {
         enemy.stunTimer -= dt;
         if (enemy.stunTimer <= 0) {
@@ -980,6 +1172,19 @@ export class Game {
           enemy.stunTimer = 0;
         }
         continue;
+      }
+
+      // Enemy trail burn: if enemy crosses a trail cell, mark it as burning
+      if (this.state.player.trailActive && this.state.trailCells.length > 0) {
+        const eCol = toCell(enemy.x, config.cell, cols - 1);
+        const eRow = toCell(enemy.y, config.cell, rows - 1);
+        const eIdx = cellToIndex(eCol, eRow, cols);
+        if (this.state.trailMask[eIdx]) {
+          // Add burn zone at this cell
+          if (!this.burnZones.some(b => b.idx === eIdx)) {
+            this.burnZones.push({ idx: eIdx, timeLeft: 1.5 });
+          }
+        }
       }
 
       // Tracker variant: nudge toward player
@@ -1210,10 +1415,10 @@ export class Game {
     const { enemies, player, trailMask } = this.state;
     const shielded = this.hasActivePowerup("shield");
 
-    // Skip damage from stunned enemies
+    // Skip damage from stunned/dead enemies
     if (player.invuln <= 0 && !shielded) {
       for (const enemy of enemies) {
-        if (enemy.stunTimer > 0) continue;
+        if (enemy.stunTimer > 0 || enemy.dead) continue;
         const dx = enemy.x - player.x;
         const dy = enemy.y - player.y;
         const minDist = enemy.radius + player.radius;
@@ -1226,8 +1431,21 @@ export class Game {
 
     if (player.trailActive && !shielded) {
       for (const enemy of enemies) {
-        if (enemy.stunTimer > 0) continue;
+        if (enemy.stunTimer > 0 || enemy.dead) continue;
         if (circleIntersectsMask(trailMask, cols, rows, config.cell, enemy.x, enemy.y, enemy.radius)) {
+          this.loseLife();
+          return;
+        }
+      }
+    }
+
+    // Burn zone damage: player steps on burning trail cell
+    if (!shielded && player.invuln <= 0) {
+      const pCol = toCell(player.x, config.cell, cols - 1);
+      const pRow = toCell(player.y, config.cell, rows - 1);
+      const pIdx = cellToIndex(pCol, pRow, cols);
+      for (const bz of this.burnZones) {
+        if (bz.idx === pIdx && bz.timeLeft > 0) {
           this.loseLife();
           return;
         }
@@ -1271,6 +1489,103 @@ export class Game {
       write++;
     }
     this.exhaustParticles.length = write;
+  }
+
+  /** Burn zones - fire left by enemies crossing trail */
+  updateBurnZones(dt) {
+    let write = 0;
+    for (let i = 0; i < this.burnZones.length; i++) {
+      this.burnZones[i].timeLeft -= dt;
+      if (this.burnZones[i].timeLeft > 0) {
+        this.burnZones[write] = this.burnZones[i];
+        write++;
+      }
+    }
+    this.burnZones.length = write;
+  }
+
+  /** Territory decay: at level 2+, slowly unclaim edge cells */
+  updateTerritoryDecay(dt) {
+    if (this.currentLevel < 2) return;
+    this.decayTimer += dt;
+    const interval = Math.max(0.3, 1.5 - this.currentLevel * 0.1);
+    if (this.decayTimer < interval) return;
+    this.decayTimer = 0;
+
+    // Find a random claimed interior edge cell and unclaim it
+    const edgeCells = [];
+    for (let row = 1; row < rows - 1; row++) {
+      for (let col = 1; col < cols - 1; col++) {
+        const idx = cellToIndex(col, row, cols);
+        if (!this.state.claimed[idx]) continue;
+        const left = this.state.claimed[idx - 1];
+        const right = this.state.claimed[idx + 1];
+        const top = this.state.claimed[idx - cols];
+        const bottom = this.state.claimed[idx + cols];
+        if (!left || !right || !top || !bottom) {
+          edgeCells.push(idx);
+        }
+      }
+    }
+    if (edgeCells.length > 0) {
+      const pick = edgeCells[Math.floor(Math.random() * edgeCells.length)];
+      this.state.claimed[pick] = 0;
+      this.state.claimedPercent = getClaimedPercent(this.state.claimed);
+      this.terrainCacheVersion += 1;
+    }
+  }
+
+  /** Claim particles - sparks along new edges */
+  updateClaimParticles(dt) {
+    let write = 0;
+    for (let i = 0; i < this.claimParticles.length; i++) {
+      const p = this.claimParticles[i];
+      p.life += dt;
+      if (p.life >= p.maxLife) continue;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 80 * dt;
+      p.vx *= 0.97;
+      this.claimParticles[write] = p;
+      write++;
+    }
+    this.claimParticles.length = write;
+  }
+
+  spawnClaimParticles() {
+    if (this.claimFlashCells.length === 0) return;
+    // Spawn a few particles at random claim cells
+    const count = Math.min(20, this.claimFlashCells.length);
+    for (let i = 0; i < count; i++) {
+      const idx = this.claimFlashCells[Math.floor(Math.random() * this.claimFlashCells.length)];
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      const x = (col + 0.5) * config.cell;
+      const y = (row + 0.5) * config.cell;
+      this.claimParticles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 120,
+        vy: -40 - Math.random() * 80,
+        life: 0,
+        maxLife: 0.4 + Math.random() * 0.4,
+        size: 1.5 + Math.random() * 2.5,
+        hue: Math.random() < 0.5 ? 40 : 30, // gold/orange
+      });
+    }
+  }
+
+  /** Shockwave rings from bombs */
+  updateShockwaves(dt) {
+    let write = 0;
+    for (let i = 0; i < this.shockwaves.length; i++) {
+      const sw = this.shockwaves[i];
+      sw.life += dt;
+      if (sw.life >= sw.maxLife) continue;
+      sw.radius = (sw.life / sw.maxLife) * sw.maxRadius;
+      this.shockwaves[write] = sw;
+      write++;
+    }
+    this.shockwaves.length = write;
   }
 
   /** Trail magnet: auto-close trail when near claimed territory */
@@ -1352,6 +1667,15 @@ export class Game {
       streakFlash: this.streakFlash,
       exhaustParticles: this.exhaustParticles,
       runHistory: loadRunHistory(),
+      killCamTime: this.killCamTime,
+      burnZones: this.burnZones,
+      claimParticles: this.claimParticles,
+      shockwaves: this.shockwaves,
+      crtEnabled: this.crtEnabled,
+      carSkin: this.getCarSkin(),
+      achievementFlash: this.achievementFlash,
+      unlockedAchievements: this.unlockedAchievements,
+      cumulativeScore: this.cumulativeScore,
     };
 
     if (this.rotateForPortrait) {
