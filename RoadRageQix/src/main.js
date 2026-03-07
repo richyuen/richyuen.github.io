@@ -19,6 +19,7 @@ const volumeSlider = document.getElementById("volume-slider");
 const shakeToggle = document.getElementById("shake-toggle");
 const versionLabel = document.getElementById("version-label");
 const resumeButton = document.getElementById("resume-btn");
+const continueButton = document.getElementById("continue-btn");
 
 const input = new InputController(window);
 const game = new Game(canvas, menuOverlay);
@@ -350,6 +351,15 @@ applyOrientationMode();
 
 startButton?.addEventListener("click", () => {
   triggerPrimaryAction();
+});
+
+continueButton?.addEventListener("click", () => {
+  ensureAudioResumed();
+  if (game.state.mode === "lost") {
+    continueButton.classList.add("hidden");
+    game.continueGame();
+    input.flush();
+  }
 });
 
 enemyMinusButton?.addEventListener("click", () => {

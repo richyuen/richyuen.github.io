@@ -1036,6 +1036,36 @@ function drawStunnedEffect(ctx, enemy, elapsedSeconds) {
   ctx.restore();
 }
 
+function drawBonusZoneFlash(ctx, canvasWidth, canvasHeight, flash) {
+  if (!flash || flash.time <= 0) return;
+  const maxTime = 2.0;
+  const progress = 1 - flash.time / maxTime;
+  // Fade in fast, hold, fade out
+  let alpha;
+  if (progress < 0.1) alpha = progress / 0.1;
+  else if (progress < 0.7) alpha = 1;
+  else alpha = (1 - progress) / 0.3;
+  alpha = Math.max(0, Math.min(1, alpha));
+
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.95;
+  ctx.textAlign = "center";
+
+  // Big gold text in center of screen
+  const y = canvasHeight * 0.3 - progress * 30;
+  const scale = 1 + Math.sin(progress * Math.PI * 4) * 0.05;
+  ctx.font = `700 ${Math.round(42 * scale)}px "Impact", "Haettenschweiler", sans-serif`;
+  // Shadow
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+  ctx.fillText(`★ BONUS +${flash.points.toLocaleString()} ★`, canvasWidth / 2 + 2, y + 2);
+  // Gold text
+  ctx.fillStyle = "#ffdd44";
+  ctx.fillText(`★ BONUS +${flash.points.toLocaleString()} ★`, canvasWidth / 2, y);
+
+  ctx.textAlign = "left";
+  ctx.restore();
+}
+
 function drawTireTrackGhosts(ctx, ghosts) {
   if (!ghosts || ghosts.length < 2) return;
   ctx.save();
@@ -1139,65 +1169,115 @@ function drawEnemyExplosions(ctx, explosions, canvasWidth, canvasHeight, worldOf
   ctx.save();
   for (const e of explosions) {
     const progress = 1 - e.time / e.maxTime;
-    // "Fly towards camera" - starts at world pos, moves to screen center, scales up
     const screenX0 = worldOffsetX + e.x * viewScale;
     const screenY0 = worldOffsetY + e.y * viewScale;
     const centerX = canvasWidth * 0.5;
     const centerY = canvasHeight * 0.5;
-    // Ease towards center
-    const ease = progress * progress;
-    const screenX = screenX0 + (centerX - screenX0) * ease * 0.4;
-    const screenY = screenY0 + (centerY - screenY0) * ease * 0.4;
-    // Scale grows dramatically - starts at enemy size, fills ~40% of screen
-    const maxRadius = Math.min(canvasWidth, canvasHeight) * 0.4;
-    const flyScale = 1 + ease * 8;
-    const radius = e.radius * viewScale * flyScale;
-    const clampedRadius = Math.min(radius, maxRadius);
-
-    // Semi-transparent so play area is visible
-    ctx.globalAlpha = (1 - progress) * 0.4;
-
-    // Outer explosion glow
-    const grad = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, clampedRadius);
-    grad.addColorStop(0, e.color || "#ff6622");
-    grad.addColorStop(0.25, "rgba(255, 180, 60, 0.7)");
-    grad.addColorStop(0.6, "rgba(255, 80, 20, 0.3)");
-    grad.addColorStop(1, "rgba(255, 40, 10, 0)");
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(screenX, screenY, clampedRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Spinning spike silhouette (enemy shape flying at you)
     const spikeCount = e.spikeCount || 12;
-    const spinAngle = (e.spinAngle || 0) + progress * 6;
-    const spikeRadius = clampedRadius * 0.5;
-    if (progress < 0.7) {
-      ctx.globalAlpha = (1 - progress / 0.7) * 0.3;
-      ctx.fillStyle = "rgba(40, 20, 10, 0.6)";
+    const spinAngle = (e.spinAngle || 0) + progress * 8;
+
+    if (e.phase === "fly") {
+      // Phase 1: Enemy flies toward camera, getting bigger
+      const flyProgress = Math.min(1, progress / 0.4); // 0-1 during fly phase
+      const ease = flyProgress * flyProgress;
+      const screenX = screenX0 + (centerX - screenX0) * ease * 0.5;
+      const screenY = screenY0 + (centerY - screenY0) * ease * 0.5;
+      // Scale grows as enemy "approaches" - starts small, gets huge
+      const flyScale = 1 + ease * 12;
+      const radius = e.radius * viewScale * flyScale;
+      const maxR = Math.min(canvasWidth, canvasHeight) * 0.35;
+      const clampedR = Math.min(radius, maxR);
+
+      // Semi-transparent enemy silhouette flying at you
+      ctx.globalAlpha = 0.45 - flyProgress * 0.1;
+
+      // Fiery glow behind the enemy
+      const grad = ctx.createRadialGradient(screenX, screenY, clampedR * 0.2, screenX, screenY, clampedR);
+      grad.addColorStop(0, e.color || "#ff6622");
+      grad.addColorStop(0.4, "rgba(255, 140, 40, 0.5)");
+      grad.addColorStop(1, "rgba(255, 40, 10, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, clampedR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Spinning spiky silhouette (the enemy itself)
+      const spikeR = clampedR * 0.55;
+      ctx.globalAlpha = (1 - flyProgress * 0.5) * 0.5;
+      ctx.fillStyle = "rgba(60, 25, 10, 0.8)";
       ctx.beginPath();
       for (let i = 0; i < spikeCount; i++) {
         const a = spinAngle + (i / spikeCount) * Math.PI * 2;
-        const inner = spikeRadius * 0.5;
-        const outer = spikeRadius * (0.9 + (i % 2) * 0.2);
+        const inner = spikeR * 0.45;
+        const outer = spikeR * (0.85 + (i % 2) * 0.25);
         const midA = a + Math.PI / spikeCount;
-        if (i === 0) {
-          ctx.moveTo(screenX + Math.cos(a) * outer, screenY + Math.sin(a) * outer);
-        } else {
-          ctx.lineTo(screenX + Math.cos(a) * outer, screenY + Math.sin(a) * outer);
-        }
+        if (i === 0) ctx.moveTo(screenX + Math.cos(a) * outer, screenY + Math.sin(a) * outer);
+        else ctx.lineTo(screenX + Math.cos(a) * outer, screenY + Math.sin(a) * outer);
         ctx.lineTo(screenX + Math.cos(midA) * inner, screenY + Math.sin(midA) * inner);
       }
       ctx.closePath();
       ctx.fill();
-    }
 
-    // Inner bright flash
-    ctx.globalAlpha = (1 - progress) * 0.6 * Math.max(0, 1 - progress * 2.5);
-    ctx.fillStyle = "#fff";
-    ctx.beginPath();
-    ctx.arc(screenX, screenY, clampedRadius * 0.12, 0, Math.PI * 2);
-    ctx.fill();
+      // Core glow
+      ctx.globalAlpha = 0.6 * (1 - flyProgress);
+      ctx.fillStyle = "#ffcc66";
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, spikeR * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else {
+      // Phase 2: Impact - enemy hits the "screen glass" and explodes outward
+      const impactDuration = e.maxTime * 0.6;
+      const impactProgress = Math.min(1, (e.impactTime || 0) / impactDuration);
+      const screenX = centerX + (screenX0 - centerX) * 0.3;
+      const screenY = centerY + (screenY0 - centerY) * 0.3;
+
+      // Expanding explosion ring
+      const maxR = Math.min(canvasWidth, canvasHeight) * (0.3 + impactProgress * 0.25);
+      ctx.globalAlpha = (1 - impactProgress) * 0.35;
+      const grad = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, maxR);
+      grad.addColorStop(0, "rgba(255, 255, 200, 0.8)");
+      grad.addColorStop(0.15, e.color || "#ff6622");
+      grad.addColorStop(0.5, "rgba(255, 80, 20, 0.3)");
+      grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, maxR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Impact "crack" lines radiating from impact point
+      if (impactProgress < 0.6) {
+        const crackAlpha = (1 - impactProgress / 0.6) * 0.5;
+        ctx.globalAlpha = crackAlpha;
+        ctx.strokeStyle = "rgba(255, 240, 200, 0.8)";
+        ctx.lineWidth = 3 - impactProgress * 4;
+        const crackCount = spikeCount;
+        for (let i = 0; i < crackCount; i++) {
+          const a = spinAngle + (i / crackCount) * Math.PI * 2;
+          const len = maxR * (0.5 + impactProgress * 0.5) * (0.7 + (i % 3) * 0.15);
+          ctx.beginPath();
+          ctx.moveTo(screenX, screenY);
+          // Jagged crack line
+          const mid1x = screenX + Math.cos(a) * len * 0.4 + Math.sin(a) * 8;
+          const mid1y = screenY + Math.sin(a) * len * 0.4 - Math.cos(a) * 8;
+          const mid2x = screenX + Math.cos(a) * len * 0.7 - Math.sin(a) * 5;
+          const mid2y = screenY + Math.sin(a) * len * 0.7 + Math.cos(a) * 5;
+          ctx.lineTo(mid1x, mid1y);
+          ctx.lineTo(mid2x, mid2y);
+          ctx.lineTo(screenX + Math.cos(a) * len, screenY + Math.sin(a) * len);
+          ctx.stroke();
+        }
+      }
+
+      // Bright flash at impact point (initial frame)
+      if (impactProgress < 0.15) {
+        ctx.globalAlpha = (1 - impactProgress / 0.15) * 0.7;
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, maxR * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
   ctx.restore();
 }
@@ -1586,6 +1666,11 @@ export function renderOverlay(ctx, game) {
   // Fuse warning
   if (state.mode === "playing") {
     drawFuseWarning(ctx, canvasWidth, game.fuseTimer || 0, game.fuseTimerDuration || 6, state.player?.trailActive);
+  }
+
+  // Bonus zone collection flash
+  if (game.bonusZoneFlash) {
+    drawBonusZoneFlash(ctx, canvasWidth, canvasHeight, game.bonusZoneFlash);
   }
 
   // Near-miss effect
