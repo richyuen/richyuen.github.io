@@ -5,7 +5,7 @@ import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./power
 import { getThemeForLevel } from "./themes.js";
 import * as audio from "./audio.js";
 
-export const GAME_VERSION = "0.8.0";
+export const GAME_VERSION = "0.9.0";
 
 const AUTOSAVE_KEY = "roadrageqix_autosave";
 const AUTOSAVE_INTERVAL = 5; // seconds between auto-saves
@@ -52,7 +52,7 @@ function clampSelectableEnemyCount(value) {
 
 /** Enemy variant types for higher levels */
 const ENEMY_VARIANTS = {
-  normal: { radiusMul: 1, speedMul: 1, spikeCount: 14, color: null },
+  normal: { radiusMul: 1, speedMul: 1, spikeCount: 12, color: null },
   fast: { radiusMul: 0.7, speedMul: 1.4, spikeCount: 10, color: "#44ddff" },
   tracker: { radiusMul: 0.85, speedMul: 1.0, spikeCount: 12, color: "#ff44cc" },
   charger: { radiusMul: 1.15, speedMul: 0.9, spikeCount: 18, color: "#ff3333" },
@@ -400,7 +400,7 @@ export class Game {
     this.burnZones = [];
 
     // Territory decay timer
-    this.decayTimer = 0;
+
 
     // Kill cam
     this.killCamTime = 0;
@@ -697,7 +697,7 @@ export class Game {
     this.bombSlowMoTime = 0;
     this.bombsUsedThisRun = 0;
     this.levelStartTime = 0;
-    this.decayTimer = 0;
+
     this.fuseTimer = 0;
     this.fuseBurnIndex = 0;
     this.nearMissTime = 0;
@@ -761,7 +761,7 @@ export class Game {
     this.bombSlowMoTime = 0;
     this.bombsUsedThisRun = 0;
     this.levelStartTime = 0;
-    this.decayTimer = 0;
+
     this.fuseTimer = 0;
     this.fuseBurnIndex = 0;
     this.nearMissTime = 0;
@@ -827,7 +827,7 @@ export class Game {
     this.weatherParticles = [];
     this.tireTrackGhosts = [];
     this.levelStartTime = this.elapsedSeconds;
-    this.decayTimer = 0;
+
     this.fuseTimer = 0;
     this.fuseBurnIndex = 0;
     this.nearMissTime = 0;
@@ -999,18 +999,17 @@ export class Game {
       if (this.bonusZoneFlash.time <= 0) this.bonusZoneFlash = null;
     }
 
-    this.updateNitro(effectiveDt, input);
-    this.updatePlayer(effectiveDt, input);
+    this.updateNitro(dt, input);
+    this.updatePlayer(dt, input);
     this.updateEnemies(effectiveDt);
     this.updateSparks(effectiveDt);
     this.updateSmoke(effectiveDt);
-    this.updatePowerups(effectiveDt);
-    this.updateActivePowerups(effectiveDt);
-    this.updateExhaustParticles(effectiveDt);
-    this.updateTrailMagnet(effectiveDt);
-    this.updateBurnZones(effectiveDt);
-    this.updateTerritoryDecay(effectiveDt);
-    this.updateClaimParticles(effectiveDt);
+    this.updatePowerups(dt);
+    this.updateActivePowerups(dt);
+    this.updateExhaustParticles(dt);
+    this.updateTrailMagnet(dt);
+    this.updateBurnZones(dt);
+    this.updateClaimParticles(dt);
     this.updateShockwaves(effectiveDt);
     this.updateFuseTimer(effectiveDt);
     this.updateNearMiss(effectiveDt);
@@ -1369,6 +1368,56 @@ export class Game {
     if (pu.type === "extraLife") {
       this.state.lives += 1;
       this.addScore(200);
+    } else if (pu.type === "lightning") {
+      // Lightning: destroy a random non-boss enemy instantly
+      const alive = this.state.enemies.filter(e => !e.dead && e.variant !== "boss" && (!e.stunTimer || e.stunTimer <= 0));
+      if (alive.length > 0) {
+        const target = alive[Math.floor(Math.random() * alive.length)];
+        target.dead = true;
+        target.respawnTimer = 6;
+        target.vx = 0;
+        target.vy = 0;
+        this.spawnEnemyExplosion(target.x, target.y, target.variantColor || "#ffee44", 1);
+        this.shockwaves.push({ x: target.x, y: target.y, radius: 0, maxRadius: 60, life: 0, maxLife: 0.4, color: "#ffee44" });
+        audio.playBomb();
+        this.screenShake = 0.4;
+        this.screenShakeTime = 0.15;
+        this.bombSlowMoTime = 0.4;
+      }
+      this.addScore(400);
+    } else if (pu.type === "trailClose") {
+      // Trail Close: instantly close and claim current trail
+      if (this.state.player.trailActive && this.state.trailCells.length >= 2) {
+        this.connectTrailToWall();
+        this.state.player.trailActive = false;
+        this.closeTrailAndClaim();
+        this.screenShake = 0.2;
+        this.screenShakeTime = 0.1;
+      }
+      this.addScore(250);
+    } else if (pu.type === "freeze") {
+      // Freeze: stun all enemies for the duration
+      for (const enemy of this.state.enemies) {
+        if (enemy.dead) continue;
+        enemy.stunTimer = 5;
+        enemy.preStunVx = enemy.vx;
+        enemy.preStunVy = enemy.vy;
+        enemy.vx = 0;
+        enemy.vy = 0;
+      }
+      this.addScore(200);
+    } else if (pu.type === "shrink") {
+      // Shrink: handled as active powerup effect — enemies rendered smaller
+      const effect = createActivePowerupEffect(pu.type);
+      if (effect) {
+        const existing = this.state.activePowerups.findIndex(p => p.type === pu.type);
+        if (existing >= 0) {
+          this.state.activePowerups[existing].remaining = effect.remaining;
+        } else {
+          this.state.activePowerups.push(effect);
+        }
+      }
+      this.addScore(150);
     } else if (pu.type === "bomb") {
       // If trail is active, close it first so territory gets claimed before enemies die
       if (this.state.player.trailActive && this.state.trailCells.length >= 2) {
@@ -1770,14 +1819,20 @@ export class Game {
 
     const { enemies, player, trailMask } = this.state;
     const shielded = this.hasActivePowerup("shield");
+    const shrinkMul = this.hasActivePowerup("shrink") ? 0.5 : 1;
+
+    // Player is invulnerable on the border walls
+    const pCol = toCell(player.x, config.cell, cols - 1);
+    const pRow = toCell(player.y, config.cell, rows - 1);
+    const onBorder = pCol === 0 || pCol === cols - 1 || pRow === 0 || pRow === rows - 1;
 
     // Skip damage from stunned/dead enemies
-    if (player.invuln <= 0 && !shielded) {
+    if (player.invuln <= 0 && !shielded && !onBorder) {
       for (const enemy of enemies) {
         if (enemy.stunTimer > 0 || enemy.dead) continue;
         const dx = enemy.x - player.x;
         const dy = enemy.y - player.y;
-        const minDist = enemy.radius + player.radius;
+        const minDist = enemy.radius * shrinkMul + player.radius;
         if (dx * dx + dy * dy <= minDist * minDist) {
           this.loseLife();
           return;
@@ -1860,36 +1915,6 @@ export class Game {
     this.burnZones.length = write;
   }
 
-  /** Territory decay: at level 2+, slowly unclaim edge cells */
-  updateTerritoryDecay(dt) {
-    if (this.currentLevel < 2) return;
-    this.decayTimer += dt;
-    const interval = Math.max(0.3, 1.5 - this.currentLevel * 0.1);
-    if (this.decayTimer < interval) return;
-    this.decayTimer = 0;
-
-    // Find a random claimed interior edge cell and unclaim it
-    const edgeCells = [];
-    for (let row = 1; row < rows - 1; row++) {
-      for (let col = 1; col < cols - 1; col++) {
-        const idx = cellToIndex(col, row, cols);
-        if (!this.state.claimed[idx]) continue;
-        const left = this.state.claimed[idx - 1];
-        const right = this.state.claimed[idx + 1];
-        const top = this.state.claimed[idx - cols];
-        const bottom = this.state.claimed[idx + cols];
-        if (!left || !right || !top || !bottom) {
-          edgeCells.push(idx);
-        }
-      }
-    }
-    if (edgeCells.length > 0) {
-      const pick = edgeCells[Math.floor(Math.random() * edgeCells.length)];
-      this.state.claimed[pick] = 0;
-      this.state.claimedPercent = getClaimedPercent(this.state.claimed);
-      this.terrainCacheVersion += 1;
-    }
-  }
 
   /** Claim particles - sparks along new edges */
   updateClaimParticles(dt) {
@@ -2442,6 +2467,8 @@ export class Game {
       tireTrackGhosts: this.tireTrackGhosts,
       bonusZoneFlash: this.bonusZoneFlash,
       bombSlowMoTime: this.bombSlowMoTime,
+      shrinkActive: this.hasActivePowerup("shrink"),
+      freezeActive: this.hasActivePowerup("freeze"),
     };
 
     if (this.rotateForPortrait) {

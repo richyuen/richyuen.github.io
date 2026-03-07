@@ -1563,10 +1563,20 @@ export function renderWorld(ctx, game) {
   drawClaimParticles(ctx, claimParticles);
 
   const enemies = state.enemies ?? (state.enemy ? [state.enemy] : []);
+  const shrinkScale = game.shrinkActive ? 0.5 : 1;
   for (const enemy of enemies) {
     if (enemy.dead) continue; // Don't render dead enemies
+    if (shrinkScale < 1) {
+      ctx.save();
+      ctx.translate(enemy.x, enemy.y);
+      ctx.scale(shrinkScale, shrinkScale);
+      ctx.translate(-enemy.x, -enemy.y);
+    }
     drawEnemy(ctx, enemy, elapsedSeconds);
     drawStunnedEffect(ctx, enemy, elapsedSeconds);
+    if (shrinkScale < 1) {
+      ctx.restore();
+    }
   }
 
   // Shockwave rings

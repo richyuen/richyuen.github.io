@@ -8,6 +8,10 @@ export const POWERUP_TYPES = {
   scoreMulti: { label: "2x SCORE", color: "#ffdd44", duration: 6, icon: "x" },
   bomb: { label: "BOMB", color: "#ff6622", duration: 0, icon: "B" },
   trailMagnet: { label: "MAGNET", color: "#88ffee", duration: 5, icon: "M" },
+  lightning: { label: "LIGHTNING", color: "#ffee44", duration: 0, icon: "Z" },
+  trailClose: { label: "CLOSE TRAIL", color: "#66ffaa", duration: 0, icon: "C" },
+  freeze: { label: "FREEZE", color: "#aaeeff", duration: 5, icon: "F" },
+  shrink: { label: "SHRINK", color: "#ddaaff", duration: 6, icon: "s" },
 };
 
 const typeKeys = Object.keys(POWERUP_TYPES);
