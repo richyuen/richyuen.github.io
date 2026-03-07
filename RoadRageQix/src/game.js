@@ -5,7 +5,7 @@ import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./power
 import { getThemeForLevel } from "./themes.js";
 import * as audio from "./audio.js";
 
-export const GAME_VERSION = "0.7.0";
+export const GAME_VERSION = "0.8.0";
 
 const AUTOSAVE_KEY = "roadrageqix_autosave";
 const AUTOSAVE_INTERVAL = 5; // seconds between auto-saves
@@ -405,6 +405,7 @@ export class Game {
     // Kill cam
     this.killCamTime = 0;
     this.killCamPending = false;
+    this.bombSlowMoTime = 0;
 
     // Claim particles
     this.claimParticles = [];
@@ -693,6 +694,7 @@ export class Game {
     this.shockwaves = [];
     this.killCamTime = 0;
     this.killCamPending = false;
+    this.bombSlowMoTime = 0;
     this.bombsUsedThisRun = 0;
     this.levelStartTime = 0;
     this.decayTimer = 0;
@@ -756,6 +758,7 @@ export class Game {
     this.shockwaves = [];
     this.killCamTime = 0;
     this.killCamPending = false;
+    this.bombSlowMoTime = 0;
     this.bombsUsedThisRun = 0;
     this.levelStartTime = 0;
     this.decayTimer = 0;
@@ -774,6 +777,7 @@ export class Game {
     this.currentTheme = getThemeForLevel(this.currentLevel);
     this.terrainCacheVersion += 1;
     this.bonusZones = [];
+    this.bonusZoneFlash = null;
     clearAutoSave();
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
@@ -805,8 +809,11 @@ export class Game {
 
     // Explode all enemies on level completion
     for (const enemy of this.state.enemies) {
-      this.spawnEnemyExplosion(enemy.x, enemy.y, enemy.variantColor);
+      this.spawnEnemyExplosion(enemy.x, enemy.y, enemy.variantColor,
+        enemy.variant === "boss" ? 1.8 : 1);
     }
+    // Dramatic slow-mo for level completion
+    this.bombSlowMoTime = 1.0;
 
     // Start level transition animation
     this.levelTransitionTime = this.levelTransitionDuration;
@@ -969,9 +976,12 @@ export class Game {
       return;
     }
 
-    // Kill cam & near-miss slow-mo
+    // Kill cam, bomb slow-mo & near-miss slow-mo
     let effectiveDt = dt;
-    if (this.killCamTime > 0) {
+    if (this.bombSlowMoTime > 0) {
+      this.bombSlowMoTime = Math.max(0, this.bombSlowMoTime - dt);
+      effectiveDt = dt * 0.12; // Very dramatic slow-mo for bombs
+    } else if (this.killCamTime > 0) {
       this.killCamTime = Math.max(0, this.killCamTime - dt);
       effectiveDt = dt * 0.15;
     } else if (this.nearMissTime > 0) {
@@ -1149,6 +1159,47 @@ export class Game {
     this.state.trailCells.push(idx);
   }
 
+  /** Connect the end of an open trail back to the nearest claimed cell */
+  connectTrailToWall() {
+    const player = this.state.player;
+    let col = toCell(player.x, config.cell, cols - 1);
+    let row = toCell(player.y, config.cell, rows - 1);
+
+    // Walk toward the nearest border/claimed cell in all 4 directions, pick shortest
+    const directions = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    let bestPath = null;
+    let bestLen = Infinity;
+
+    for (const [dc, dr] of directions) {
+      const path = [];
+      let c = col + dc;
+      let r = row + dr;
+      while (c >= 0 && c < cols && r >= 0 && r < rows) {
+        const idx = cellToIndex(c, r, cols);
+        if (this.state.claimed[idx]) break;
+        if (!this.state.trailMask[idx]) {
+          path.push(idx);
+        }
+        c += dc;
+        r += dr;
+      }
+      if (c >= 0 && c < cols && r >= 0 && r < rows && path.length < bestLen) {
+        bestLen = path.length;
+        bestPath = path;
+      }
+    }
+
+    // Add connecting cells to the trail
+    if (bestPath) {
+      for (const idx of bestPath) {
+        if (!this.state.trailMask[idx]) {
+          this.state.trailMask[idx] = 1;
+          this.state.trailCells.push(idx);
+        }
+      }
+    }
+  }
+
   closeTrailAndClaim() {
     if (this.state.trailCells.length < 2) {
       clearMask(this.state.trailMask, this.state.trailCells);
@@ -1321,6 +1372,8 @@ export class Game {
     } else if (pu.type === "bomb") {
       // If trail is active, close it first so territory gets claimed before enemies die
       if (this.state.player.trailActive && this.state.trailCells.length >= 2) {
+        // Connect trail end back to nearest claimed cell to form a closed loop
+        this.connectTrailToWall();
         this.state.player.trailActive = false;
         this.closeTrailAndClaim();
       }
@@ -1356,8 +1409,15 @@ export class Game {
         enemy.vx = 0;
         enemy.vy = 0;
       }
+      // Spawn fly-at-screen explosions for each dead enemy
+      for (const enemy of deadEnemies) {
+        this.spawnEnemyExplosion(enemy.x, enemy.y, enemy.variantColor,
+          enemy.variant === "boss" ? 1.8 : 1);
+      }
       // Chain reactions: enemies close together explode bigger
       this.processChainReactions(deadEnemies);
+      // Dramatic slow-mo for bomb
+      this.bombSlowMoTime = 0.8;
       this.state.sparks.length = 0;
       this.bombsUsedThisRun += 1;
       if (this.bombsUsedThisRun >= 3) this.checkAchievement("bomb_squad");
@@ -2381,6 +2441,7 @@ export class Game {
       enemyExplosions: this.enemyExplosions,
       tireTrackGhosts: this.tireTrackGhosts,
       bonusZoneFlash: this.bonusZoneFlash,
+      bombSlowMoTime: this.bombSlowMoTime,
     };
 
     if (this.rotateForPortrait) {
