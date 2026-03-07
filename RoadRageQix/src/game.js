@@ -5,7 +5,10 @@ import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./power
 import { getThemeForLevel } from "./themes.js";
 import * as audio from "./audio.js";
 
-export const GAME_VERSION = "0.4.0";
+export const GAME_VERSION = "0.5.0";
+
+const AUTOSAVE_KEY = "roadrageqix_autosave";
+const AUTOSAVE_INTERVAL = 5; // seconds between auto-saves
 
 export const config = {
   cell: 8,
@@ -300,6 +303,16 @@ function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
 }
 
+function saveAutoSave(data) {
+  try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data)); } catch {}
+}
+function loadAutoSave() {
+  try { return JSON.parse(localStorage.getItem(AUTOSAVE_KEY)); } catch { return null; }
+}
+function clearAutoSave() {
+  try { localStorage.removeItem(AUTOSAVE_KEY); } catch {}
+}
+
 export class Game {
   constructor(canvas, menuOverlay) {
     this.canvas = canvas;
@@ -401,6 +414,16 @@ export class Game {
     this.nearMissTime = 0;
     this.nearMissCooldown = 0;
 
+    // Weather particles
+    this.weatherParticles = [];
+    this.maxWeatherParticles = 60;
+
+    // Enemy explosion effects (screen-space overlays)
+    this.enemyExplosions = [];
+
+    // Auto-save timer
+    this.autoSaveTimer = 0;
+
     // Settings
     const savedSettings = loadSettings();
     this.settingsVolume = savedSettings.volume ?? 0.45;
@@ -428,6 +451,11 @@ export class Game {
     });
     this.resize();
     this.syncMenuVisibility();
+  }
+
+  hasAutoSave() {
+    const save = loadAutoSave();
+    return save && save.version === GAME_VERSION;
   }
 
   setPortraitRotation(enabled) {
@@ -636,6 +664,9 @@ export class Game {
     this.fuseBurnIndex = 0;
     this.nearMissTime = 0;
     this.nearMissCooldown = 0;
+    this.weatherParticles = [];
+    this.enemyExplosions = [];
+    this.autoSaveTimer = 0;
     this.paused = false;
     this.tutorialShown = false;
     this.tutorialTime = 0;
@@ -643,6 +674,7 @@ export class Game {
     this.currentTheme = getThemeForLevel(1);
     this.terrainCacheVersion += 1;
     this.bonusZones = [];
+    clearAutoSave();
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
       lives: config.initialLives,
@@ -675,6 +707,11 @@ export class Game {
     // Survivor achievement
     if (this.currentLevel >= 5) this.checkAchievement("survivor");
 
+    // Explode all enemies on level completion
+    for (const enemy of this.state.enemies) {
+      this.spawnEnemyExplosion(enemy.x, enemy.y, enemy.variantColor);
+    }
+
     // Start level transition animation
     this.levelTransitionTime = this.levelTransitionDuration;
     this.levelTransitionLevel = this.currentLevel;
@@ -684,6 +721,7 @@ export class Game {
     this.exhaustParticles = [];
     this.burnZones = [];
     this.claimParticles = [];
+    this.weatherParticles = [];
     this.levelStartTime = this.elapsedSeconds;
     this.decayTimer = 0;
     this.fuseTimer = 0;
@@ -721,6 +759,7 @@ export class Game {
 
     if (this.state.lives <= 0) {
       this.state.mode = "lost";
+      clearAutoSave();
       if (this.score > this.highScore) {
         this.highScore = this.score;
         saveHighScore(this.score);
@@ -863,6 +902,9 @@ export class Game {
     this.updateShockwaves(effectiveDt);
     this.updateFuseTimer(effectiveDt);
     this.updateNearMiss(effectiveDt);
+    this.updateWeather(dt);
+    this.updateEnemyExplosions(dt);
+    this.updateAutoSave(dt);
     this.detectDamage();
 
     // Engine audio
@@ -1816,6 +1858,194 @@ export class Game {
     }
   }
 
+  /** Weather particle system */
+  updateWeather(dt) {
+    const weather = this.currentTheme?.weather;
+    if (!weather) return;
+
+    // Spawn new particles
+    if (this.weatherParticles.length < this.maxWeatherParticles && Math.random() < 0.3) {
+      const p = { life: 1, maxLife: 1 };
+      switch (weather) {
+        case "rain":
+          p.x = Math.random() * config.worldWidth;
+          p.y = -10;
+          p.vx = -30 + Math.random() * 10;
+          p.vy = 400 + Math.random() * 200;
+          p.maxLife = 2;
+          p.life = 2;
+          p.len = 8 + Math.random() * 12;
+          break;
+        case "snow":
+          p.x = Math.random() * config.worldWidth;
+          p.y = -5;
+          p.vx = -15 + Math.random() * 30;
+          p.vy = 30 + Math.random() * 40;
+          p.maxLife = 6;
+          p.life = 6;
+          p.size = 2 + Math.random() * 3;
+          break;
+        case "dust":
+        case "sandstorm":
+          p.x = -10;
+          p.y = Math.random() * config.worldHeight;
+          p.vx = 60 + Math.random() * (weather === "sandstorm" ? 140 : 60);
+          p.vy = -10 + Math.random() * 20;
+          p.maxLife = 4;
+          p.life = 4;
+          p.size = 2 + Math.random() * 4;
+          break;
+        case "embers":
+          p.x = Math.random() * config.worldWidth;
+          p.y = config.worldHeight + 5;
+          p.vx = -20 + Math.random() * 40;
+          p.vy = -(40 + Math.random() * 60);
+          p.maxLife = 3;
+          p.life = 3;
+          p.size = 1.5 + Math.random() * 2.5;
+          break;
+        case "spores":
+          p.x = Math.random() * config.worldWidth;
+          p.y = Math.random() * config.worldHeight;
+          p.vx = 0;
+          p.vy = 0;
+          p.maxLife = 4;
+          p.life = 4;
+          p.size = 2 + Math.random() * 3;
+          p.phase = Math.random() * Math.PI * 2;
+          break;
+      }
+      this.weatherParticles.push(p);
+    }
+
+    // Update
+    for (let i = this.weatherParticles.length - 1; i >= 0; i--) {
+      const p = this.weatherParticles[i];
+      p.life -= dt;
+      if (p.life <= 0 || p.x > config.worldWidth + 20 || p.y > config.worldHeight + 20 || p.y < -20) {
+        this.weatherParticles.splice(i, 1);
+        continue;
+      }
+      if (weather === "spores") {
+        p.x += Math.sin(this.elapsedSeconds * 1.2 + p.phase) * 15 * dt;
+        p.y += Math.cos(this.elapsedSeconds * 0.9 + p.phase * 1.3) * 10 * dt;
+      } else {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      }
+    }
+  }
+
+  /** Enemy explosion overlay effects */
+  updateEnemyExplosions(dt) {
+    for (let i = this.enemyExplosions.length - 1; i >= 0; i--) {
+      const e = this.enemyExplosions[i];
+      e.time -= dt;
+      if (e.time <= 0) {
+        this.enemyExplosions.splice(i, 1);
+      }
+    }
+  }
+
+  spawnEnemyExplosion(x, y, color) {
+    this.enemyExplosions.push({
+      x, y,
+      color: color || "#ff6622",
+      time: 0.8,
+      maxTime: 0.8,
+      radius: 20 + Math.random() * 15,
+    });
+  }
+
+  /** Auto-save current run state */
+  updateAutoSave(dt) {
+    this.autoSaveTimer -= dt;
+    if (this.autoSaveTimer > 0) return;
+    this.autoSaveTimer = AUTOSAVE_INTERVAL;
+    this.saveCurrentRun();
+  }
+
+  saveCurrentRun() {
+    if (this.state.mode !== "playing") return;
+    const st = this.state;
+    saveAutoSave({
+      version: GAME_VERSION,
+      score: this.score,
+      level: this.currentLevel,
+      lives: st.lives,
+      enemyCount: this.currentEnemyCount,
+      selectedEnemyCount: this.selectedEnemyCount,
+      claimedPercent: st.claimedPercent,
+      claimed: Array.from(st.claimed),
+      playerX: st.player.x,
+      playerY: st.player.y,
+      streakCount: this.streakCount,
+      bombsUsedThisRun: this.bombsUsedThisRun,
+      elapsedSeconds: this.elapsedSeconds,
+      levelStartTime: this.levelStartTime,
+    });
+  }
+
+  tryResumeAutoSave() {
+    const save = loadAutoSave();
+    if (!save || save.version !== GAME_VERSION) {
+      clearAutoSave();
+      return false;
+    }
+    this.score = save.score || 0;
+    this.currentLevel = save.level || 1;
+    this.currentEnemyCount = save.enemyCount || 1;
+    this.selectedEnemyCount = save.selectedEnemyCount || 1;
+    this.streakCount = save.streakCount || 0;
+    this.bombsUsedThisRun = save.bombsUsedThisRun || 0;
+    this.elapsedSeconds = save.elapsedSeconds || 0;
+    this.levelStartTime = save.levelStartTime || 0;
+    this.currentTheme = getThemeForLevel(this.currentLevel);
+
+    this.state = this.createFreshState({
+      enemyCount: this.currentEnemyCount,
+      lives: save.lives || config.initialLives,
+      mode: "playing",
+      level: this.currentLevel,
+    });
+
+    // Restore claimed territory
+    if (save.claimed && save.claimed.length === this.state.claimed.length) {
+      this.state.claimed.set(save.claimed);
+      this.state.claimedPercent = getClaimedPercent(this.state.claimed);
+    }
+
+    // Restore player position
+    if (save.playerX != null) this.state.player.x = save.playerX;
+    if (save.playerY != null) this.state.player.y = save.playerY;
+
+    this.terrainCacheVersion += 1;
+    this.spawnBonusZones();
+    this.paused = false;
+    this.tutorialShown = true;
+    this.weatherParticles = [];
+    this.enemyExplosions = [];
+
+    // Start audio systems
+    audio.ensureAudioResumed();
+    audio.startAmbient();
+    audio.startEngine();
+    audio.startMusic();
+    audio.startProximityTone();
+    audio.startReverb();
+    setTimeout(() => {
+      audio.startAmbient();
+      audio.startEngine();
+      audio.startMusic();
+      audio.startProximityTone();
+      audio.startReverb();
+    }, 150);
+
+    this.syncMenuVisibility();
+    clearAutoSave();
+    return true;
+  }
+
   /** Find closest enemy distance to any trail cell */
   getTrailDangerLevel() {
     if (!this.state.player.trailActive || this.state.trailCells.length === 0) return 0;
@@ -1884,6 +2114,8 @@ export class Game {
       fuseTimer: this.fuseTimer,
       fuseTimerDuration: config.fuseTimerDuration,
       fuseBurnIndex: this.fuseBurnIndex,
+      weatherParticles: this.weatherParticles,
+      enemyExplosions: this.enemyExplosions,
     };
 
     if (this.rotateForPortrait) {

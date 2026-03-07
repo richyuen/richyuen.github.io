@@ -1,4 +1,5 @@
 import { POWERUP_TYPES } from "./powerups.js";
+import { ACHIEVEMENTS } from "./game.js";
 
 // Module-level terrain cache
 let cachedTerrainCanvas = null;
@@ -1035,6 +1036,87 @@ function drawStunnedEffect(ctx, enemy, elapsedSeconds) {
   ctx.restore();
 }
 
+function drawWeatherParticles(ctx, particles, theme, elapsedSeconds) {
+  if (!particles || particles.length === 0) return;
+  const weather = theme?.weather;
+  if (!weather) return;
+
+  ctx.save();
+  for (const p of particles) {
+    const alpha = Math.min(1, p.life / (p.maxLife * 0.3), (p.maxLife - (p.maxLife - p.life)) > p.maxLife * 0.7 ? p.life / (p.maxLife * 0.3) : 1);
+    ctx.globalAlpha = Math.min(0.6, alpha * 0.6);
+
+    switch (weather) {
+      case "rain":
+        ctx.strokeStyle = "rgba(180, 210, 255, 0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x + p.vx * 0.01, p.y + p.len);
+        ctx.stroke();
+        break;
+      case "snow":
+        ctx.fillStyle = "#e8f0ff";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case "dust":
+      case "sandstorm":
+        ctx.fillStyle = weather === "sandstorm" ? "rgba(210, 180, 120, 0.6)" : "rgba(180, 150, 110, 0.5)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case "embers":
+        ctx.fillStyle = `rgba(255, ${120 + Math.sin(elapsedSeconds * 8 + p.x) * 60 | 0}, 30, 0.8)`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case "spores":
+        ctx.globalAlpha = 0.25 + Math.sin(elapsedSeconds * 2 + p.phase) * 0.15;
+        ctx.fillStyle = "rgba(150, 255, 120, 0.6)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+    }
+  }
+  ctx.restore();
+}
+
+function drawEnemyExplosions(ctx, explosions, canvasWidth, canvasHeight, worldOffsetX, worldOffsetY, viewScale) {
+  if (!explosions || explosions.length === 0) return;
+  ctx.save();
+  for (const e of explosions) {
+    const progress = 1 - e.time / e.maxTime;
+    const screenX = worldOffsetX + e.x * viewScale;
+    const screenY = worldOffsetY + e.y * viewScale;
+    const maxRadius = Math.min(canvasWidth, canvasHeight) * 0.35;
+    const radius = e.radius * viewScale + progress * maxRadius;
+
+    ctx.globalAlpha = (1 - progress) * 0.35;
+    const grad = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, radius);
+    grad.addColorStop(0, e.color || "#ff6622");
+    grad.addColorStop(0.3, "rgba(255, 160, 60, 0.6)");
+    grad.addColorStop(0.7, "rgba(255, 80, 20, 0.2)");
+    grad.addColorStop(1, "rgba(255, 40, 10, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner bright flash
+    ctx.globalAlpha = (1 - progress) * 0.5 * Math.max(0, 1 - progress * 3);
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, radius * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore, theme, streakCount) {
   const percent = Math.round(state.claimedPercent * 100);
   const nitro = state.nitro ?? { activeSeconds: 0, cooldownSeconds: 0 };
@@ -1043,25 +1125,35 @@ function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore, t
   const level = state.level ?? 1;
   const enemyCount = state.enemyCount ?? (state.enemies?.length ?? 1);
 
+  // Dynamic HUD scaling: scale down on small screens, up on large
+  const baseWidth = 960;
+  const s = Math.max(0.55, Math.min(1.2, canvasWidth / baseWidth));
+
+  const hudW = Math.round(390 * s);
+  const hudH = Math.round(155 * s);
+  const hudX = Math.round(18 * s);
+  const hudY = Math.round(14 * s);
+  const padX = Math.round(34 * s);
+
   ctx.fillStyle = "rgba(12, 9, 7, 0.62)";
-  ctx.fillRect(18, 14, 390, 155);
+  ctx.fillRect(hudX, hudY, hudW, hudH);
   ctx.strokeStyle = "rgba(255, 194, 128, 0.5)";
   ctx.lineWidth = 1;
-  ctx.strokeRect(18, 14, 390, 155);
+  ctx.strokeRect(hudX, hudY, hudW, hudH);
 
   const hudColor = theme?.hudAccent || "#f5d4a5";
   ctx.fillStyle = hudColor;
-  ctx.font = '600 20px "Bahnschrift", "Segoe UI", sans-serif';
-  ctx.fillText(`Territory: ${percent}% / 75%`, 34, 46);
-  ctx.fillText(`Lives: ${state.lives}`, 34, 74);
-  ctx.font = '600 16px "Bahnschrift", "Segoe UI", sans-serif';
-  ctx.fillText(`Level: ${level}  Enemies: ${enemyCount}`, 34, 95);
+  ctx.font = `600 ${Math.round(20 * s)}px "Bahnschrift", "Segoe UI", sans-serif`;
+  ctx.fillText(`Territory: ${percent}% / 75%`, padX, hudY + Math.round(32 * s));
+  ctx.fillText(`Lives: ${state.lives}`, padX, hudY + Math.round(60 * s));
+  ctx.font = `600 ${Math.round(16 * s)}px "Bahnschrift", "Segoe UI", sans-serif`;
+  ctx.fillText(`Level: ${level}  Enemies: ${enemyCount}`, padX, hudY + Math.round(81 * s));
 
   // Score
   ctx.fillStyle = "#ffd28f";
-  ctx.font = '600 16px "Bahnschrift", "Segoe UI", sans-serif';
+  ctx.font = `600 ${Math.round(16 * s)}px "Bahnschrift", "Segoe UI", sans-serif`;
   const streakTxt = streakCount >= 2 ? `  Streak: ${streakCount}` : "";
-  ctx.fillText(`Score: ${score}  High: ${highScore}${streakTxt}`, 34, 114);
+  ctx.fillText(`Score: ${score}  High: ${highScore}${streakTxt}`, padX, hudY + Math.round(100 * s));
 
   const nitroLabel = nitroActive
     ? `IGNITION ACTIVE ${nitro.activeSeconds.toFixed(1)}s`
@@ -1071,13 +1163,13 @@ function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore, t
         : "IGNITION READY (Space/Shift)"
       : `IGNITION COOLING ${nitro.cooldownSeconds.toFixed(1)}s`;
   ctx.fillStyle = nitroActive ? "#ffd28f" : nitroReady ? "#ffb36f" : "rgba(245, 212, 165, 0.88)";
-  ctx.font = '600 14px "Bahnschrift", "Segoe UI", sans-serif';
-  ctx.fillText(nitroLabel, 34, 134);
+  ctx.font = `600 ${Math.round(14 * s)}px "Bahnschrift", "Segoe UI", sans-serif`;
+  ctx.fillText(nitroLabel, padX, hudY + Math.round(120 * s));
 
-  const barX = 34;
-  const barY = 141;
-  const barWidth = 260;
-  const barHeight = 9;
+  const barX = padX;
+  const barY = hudY + Math.round(127 * s);
+  const barWidth = Math.round(260 * s);
+  const barHeight = Math.round(9 * s);
   let fill = 1;
   if (nitroActive) {
     fill = nitro.activeSeconds / config.ignitionNitroDuration;
@@ -1097,21 +1189,21 @@ function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore, t
   // Active powerups display
   const activePowerups = state.activePowerups ?? [];
   if (activePowerups.length > 0) {
-    let px = 34;
-    const py = 164;
-    ctx.font = '600 11px "Bahnschrift", "Segoe UI", sans-serif';
+    let px = padX;
+    const py = hudY + Math.round(150 * s);
+    ctx.font = `600 ${Math.round(11 * s)}px "Bahnschrift", "Segoe UI", sans-serif`;
     for (const ap of activePowerups) {
       const def = POWERUP_TYPES[ap.type];
       if (!def) continue;
       ctx.fillStyle = def.color;
       ctx.fillText(`${def.label} ${ap.remaining.toFixed(1)}s`, px, py);
-      px += ctx.measureText(`${def.label} ${ap.remaining.toFixed(1)}s`).width + 12;
+      px += ctx.measureText(`${def.label} ${ap.remaining.toFixed(1)}s`).width + Math.round(12 * s);
     }
   }
 
   ctx.fillStyle = "rgba(245, 212, 165, 0.7)";
-  ctx.font = '500 14px "Bahnschrift", "Segoe UI", sans-serif';
-  ctx.fillText(`${theme?.name || "Wasteland"} Sector`, canvasWidth - 170, 32);
+  ctx.font = `500 ${Math.round(14 * s)}px "Bahnschrift", "Segoe UI", sans-serif`;
+  ctx.fillText(`${theme?.name || "Wasteland"} Sector`, canvasWidth - Math.round(170 * s), Math.round(32 * s));
 }
 
 function drawDamageFlash(ctx, canvasWidth, canvasHeight, flashTime) {
@@ -1288,6 +1380,9 @@ export function renderWorld(ctx, game) {
   const shielded = (state.activePowerups ?? []).some(p => p.type === "shield");
   drawCar(ctx, state.player, elapsedSeconds, shielded, carSkin);
 
+  // Weather particles (world-space)
+  drawWeatherParticles(ctx, game.weatherParticles, game.theme, elapsedSeconds);
+
   ctx.strokeStyle = "rgba(255, 210, 159, 0.45)";
   ctx.lineWidth = 2;
   ctx.strokeRect(0, 0, worldWidth, worldHeight);
@@ -1340,11 +1435,15 @@ export function renderOverlay(ctx, game) {
     drawRunHistory(ctx, canvasWidth, canvasHeight, runHistory);
     // Show unlocked achievements on death screen
     if (unlockedAchievements && unlockedAchievements.length > 0) {
+      const names = unlockedAchievements.map(id => {
+        const def = ACHIEVEMENTS.find(a => a.id === id);
+        return def ? def.name : id;
+      });
       ctx.save();
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(244, 220, 193, 0.5)";
       ctx.font = '500 11px "Bahnschrift", "Segoe UI", sans-serif';
-      ctx.fillText(`Badges: ${unlockedAchievements.join(", ")}`, canvasWidth / 2, canvasHeight / 2 + 195);
+      ctx.fillText(`Badges: ${names.join(", ")}`, canvasWidth / 2, canvasHeight / 2 + 195);
       ctx.textAlign = "left";
       ctx.restore();
     }
@@ -1369,6 +1468,10 @@ export function renderOverlay(ctx, game) {
   if (damageFlash > 0) {
     drawDamageFlash(ctx, canvasWidth, canvasHeight, damageFlash);
   }
+
+  // Enemy explosion overlays (semi-transparent)
+  drawEnemyExplosions(ctx, game.enemyExplosions, canvasWidth, canvasHeight,
+    game.worldOffsetX, game.worldOffsetY, game.viewScale);
 
   // Achievement flash
   drawAchievementFlash(ctx, canvasWidth, achievementFlash);

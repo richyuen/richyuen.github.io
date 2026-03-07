@@ -18,12 +18,26 @@ const settingsPanel = document.getElementById("settings-panel");
 const volumeSlider = document.getElementById("volume-slider");
 const shakeToggle = document.getElementById("shake-toggle");
 const versionLabel = document.getElementById("version-label");
+const resumeButton = document.getElementById("resume-btn");
 
 const input = new InputController(window);
 const game = new Game(canvas, menuOverlay);
 
 // Version label
 if (versionLabel) versionLabel.textContent = `v${GAME_VERSION}`;
+
+// Show resume button if auto-save exists
+if (resumeButton && game.hasAutoSave()) {
+  resumeButton.classList.remove("hidden");
+}
+
+resumeButton?.addEventListener("click", () => {
+  ensureAudioResumed();
+  if (game.tryResumeAutoSave()) {
+    resumeButton.classList.add("hidden");
+    input.flush();
+  }
+});
 
 // Instructions toggle
 instructionsBtn?.addEventListener("click", () => {
@@ -136,6 +150,7 @@ function inSetupScreen() {
 function triggerPrimaryAction() {
   ensureAudioResumed();
   if (game.state.mode === "menu") {
+    resumeButton?.classList.add("hidden");
     game.startGame();
     input.flush();
     return;
