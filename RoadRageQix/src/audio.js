@@ -417,3 +417,124 @@ export function playStreak() {
     osc.stop(start + 0.16);
   }
 }
+
+/** Announcer voice clips - synthesized oscillator patterns */
+export function playAnnouncerStreak() {
+  if (!isReady()) return;
+  const ctx = audioCtx;
+  const t = now();
+  const freqs = [300, 400, 500, 600, 700];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = freqs[i];
+    const start = t + i * 0.04;
+    g.gain.setValueAtTime(0.07, start);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.06);
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = freqs[i] * 2;
+    bp.Q.value = 5;
+    osc.connect(bp).connect(g).connect(masterGain);
+    osc.start(start);
+    osc.stop(start + 0.07);
+  }
+}
+
+export function playAnnouncerLevelUp() {
+  if (!isReady()) return;
+  const ctx = audioCtx;
+  const t = now();
+  const notes = [440, 550, 660, 880];
+  for (let i = 0; i < notes.length; i++) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = notes[i];
+    const start = t + i * 0.08;
+    g.gain.setValueAtTime(0.09, start);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.12);
+    osc.connect(g).connect(masterGain);
+    osc.start(start);
+    osc.stop(start + 0.13);
+  }
+}
+
+export function playAnnouncerDanger() {
+  if (!isReady()) return;
+  const ctx = audioCtx;
+  const t = now();
+  for (let i = 0; i < 3; i++) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = "sawtooth";
+    const start = t + i * 0.1;
+    osc.frequency.setValueAtTime(600, start);
+    osc.frequency.exponentialRampToValueAtTime(300, start + 0.08);
+    g.gain.setValueAtTime(0.05, start);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.09);
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1200;
+    osc.connect(lp).connect(g).connect(masterGain);
+    osc.start(start);
+    osc.stop(start + 0.1);
+  }
+}
+
+export function playAnnouncerAchievement() {
+  if (!isReady()) return;
+  const ctx = audioCtx;
+  const t = now();
+  const notes = [523, 659, 784, 1047];
+  for (let i = 0; i < notes.length; i++) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = notes[i];
+    const start = t + i * 0.07;
+    g.gain.setValueAtTime(0.1, start);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+    osc.connect(g).connect(masterGain);
+    osc.start(start);
+    osc.stop(start + 0.19);
+  }
+}
+
+/** Adaptive reverb - increases wet mix with claim % */
+let reverbDelay = null;
+let reverbFeedback = null;
+let reverbWetGain = null;
+
+export function startReverb() {
+  if (!isReady() || reverbDelay) return;
+  const ctx = audioCtx;
+  reverbDelay = ctx.createDelay(0.5);
+  reverbDelay.delayTime.value = 0.15;
+  reverbFeedback = ctx.createGain();
+  reverbFeedback.gain.value = 0.25;
+  reverbWetGain = ctx.createGain();
+  reverbWetGain.gain.value = 0;
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 2000;
+  masterGain.connect(reverbDelay);
+  reverbDelay.connect(lp);
+  lp.connect(reverbFeedback);
+  reverbFeedback.connect(reverbDelay);
+  lp.connect(reverbWetGain);
+  reverbWetGain.connect(audioCtx.destination);
+}
+
+export function updateReverb(claimPercent) {
+  if (!reverbWetGain) return;
+  reverbWetGain.gain.value = claimPercent * 0.1;
+  if (reverbFeedback) reverbFeedback.gain.value = 0.2 + claimPercent * 0.15;
+}
+
+export function stopReverb() {
+  if (reverbDelay) { try { reverbDelay.disconnect(); } catch {} reverbDelay = null; }
+  if (reverbFeedback) { try { reverbFeedback.disconnect(); } catch {} reverbFeedback = null; }
+  if (reverbWetGain) { try { reverbWetGain.disconnect(); } catch {} reverbWetGain = null; }
+}
