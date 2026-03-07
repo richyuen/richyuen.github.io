@@ -5,7 +5,7 @@ import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./power
 import { getThemeForLevel } from "./themes.js";
 import * as audio from "./audio.js";
 
-export const GAME_VERSION = "0.6.0";
+export const GAME_VERSION = "0.7.0";
 
 const AUTOSAVE_KEY = "roadrageqix_autosave";
 const AUTOSAVE_INTERVAL = 5; // seconds between auto-saves
@@ -342,6 +342,7 @@ export class Game {
     this.menuTitle = menuOverlay?.querySelector("#menu-title");
     this.menuSubtitle = menuOverlay?.querySelector("#menu-subtitle");
     this.menuStartButton = menuOverlay?.querySelector("#start-btn");
+    this.menuContinueButton = menuOverlay?.querySelector("#continue-btn");
     this.menuEnemyCount = menuOverlay?.querySelector("#enemy-count-value");
 
     this.canvasWidth = 1280;
@@ -430,6 +431,7 @@ export class Game {
 
     // Bonus zones - special areas worth extra points
     this.bonusZones = [];
+    this.bonusZoneFlash = null; // { points, time, x, y }
 
     // Near-miss slow-mo
     this.nearMissTime = 0;
@@ -585,6 +587,16 @@ export class Game {
       this.menuStartButton.textContent = inDeathScreen ? "Restart Run" : "Start Engine";
     }
 
+    // Show continue button on death screen (continue from current level, score resets)
+    if (this.menuContinueButton) {
+      if (inDeathScreen && this.currentLevel > 1) {
+        this.menuContinueButton.classList.remove("hidden");
+        this.menuContinueButton.textContent = `Continue from Level ${this.currentLevel} (Score Reset)`;
+      } else {
+        this.menuContinueButton.classList.add("hidden");
+      }
+    }
+
     if (this.menuEnemyCount) {
       this.menuEnemyCount.textContent = String(this.selectedEnemyCount);
     }
@@ -699,6 +711,7 @@ export class Game {
     this.currentTheme = getThemeForLevel(1);
     this.terrainCacheVersion += 1;
     this.bonusZones = [];
+    this.bonusZoneFlash = null;
     clearAutoSave();
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
@@ -712,6 +725,64 @@ export class Game {
 
   restartGame() {
     this.startGame();
+  }
+
+  /** Continue run from current level but reset score to 0 */
+  continueGame() {
+    audio.ensureAudioResumed();
+    audio.startAmbient();
+    audio.startEngine();
+    audio.startMusic();
+    audio.startProximityTone();
+    audio.startReverb();
+    setTimeout(() => {
+      audio.startAmbient();
+      audio.startEngine();
+      audio.startMusic();
+      audio.startProximityTone();
+      audio.startReverb();
+    }, 150);
+
+    // Keep current level and enemy count, reset score and lives
+    this.score = 0;
+    this.comboCount = 0;
+    this.scoreMultiplier = 1;
+    this.streakCount = 0;
+    this.streakFlash = 0;
+    this.streakBestThisRun = 0;
+    this.exhaustParticles = [];
+    this.burnZones = [];
+    this.claimParticles = [];
+    this.shockwaves = [];
+    this.killCamTime = 0;
+    this.killCamPending = false;
+    this.bombsUsedThisRun = 0;
+    this.levelStartTime = 0;
+    this.decayTimer = 0;
+    this.fuseTimer = 0;
+    this.fuseBurnIndex = 0;
+    this.nearMissTime = 0;
+    this.nearMissCooldown = 0;
+    this.weatherParticles = [];
+    this.enemyExplosions = [];
+    this.tireTrackGhosts = [];
+    this.autoSaveTimer = 0;
+    this.paused = false;
+    this.tutorialShown = true;
+    this.tutorialTime = 0;
+    this.levelTransitionTime = 0;
+    this.currentTheme = getThemeForLevel(this.currentLevel);
+    this.terrainCacheVersion += 1;
+    this.bonusZones = [];
+    clearAutoSave();
+    this.state = this.createFreshState({
+      enemyCount: this.currentEnemyCount,
+      lives: config.initialLives,
+      mode: "playing",
+      level: this.currentLevel,
+    });
+    this.spawnBonusZones();
+    this.syncMenuVisibility();
   }
 
   advanceLevel() {
@@ -911,6 +982,11 @@ export class Game {
     if (this.achievementFlash) {
       this.achievementFlash.time -= dt;
       if (this.achievementFlash.time <= 0) this.achievementFlash = null;
+    }
+    // Bonus zone flash timer
+    if (this.bonusZoneFlash) {
+      this.bonusZoneFlash.time -= dt;
+      if (this.bonusZoneFlash.time <= 0) this.bonusZoneFlash = null;
     }
 
     this.updateNitro(effectiveDt, input);
@@ -1243,6 +1319,11 @@ export class Game {
       this.state.lives += 1;
       this.addScore(200);
     } else if (pu.type === "bomb") {
+      // If trail is active, close it first so territory gets claimed before enemies die
+      if (this.state.player.trailActive && this.state.trailCells.length >= 2) {
+        this.state.player.trailActive = false;
+        this.closeTrailAndClaim();
+      }
       // Bomb: kill all enemies (respawn after 5s), clear sparks
       audio.playBomb();
       this.screenShake = 0.8;
@@ -1882,7 +1963,7 @@ export class Game {
           this.bonusZones.push({
             col, row, idx,
             radius: 2 + Math.floor(Math.random() * 2), // 2-3 cell radius
-            points: 500 + this.currentLevel * 200,
+            points: 10000 + this.currentLevel * 2000,
             collected: false,
             pulse: Math.random() * Math.PI * 2,
           });
@@ -1916,19 +1997,27 @@ export class Game {
         bz.collected = true;
         this.addScore(bz.points);
         audio.playBonusZone();
-        // Spawn celebration particles
+        // Screen shake + flash for juicy feedback
+        this.screenShake = 0.5;
+        this.screenShakeTime = 0.15;
+        // Show bonus zone flash with point value
+        this.bonusZoneFlash = { points: bz.points, time: 2.0, x: bz.col, y: bz.row };
+        // Spawn big celebration particles
         const cx = (bz.col + 0.5) * config.cell;
         const cy = (bz.row + 0.5) * config.cell;
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < 24; i++) {
+          const angle = (i / 24) * Math.PI * 2;
           this.claimParticles.push({
             x: cx, y: cy,
-            vx: (Math.random() - 0.5) * 200,
-            vy: -60 - Math.random() * 120,
-            life: 0, maxLife: 0.6 + Math.random() * 0.4,
-            size: 2 + Math.random() * 3,
+            vx: Math.cos(angle) * (100 + Math.random() * 150),
+            vy: Math.sin(angle) * (100 + Math.random() * 150) - 40,
+            life: 0, maxLife: 0.8 + Math.random() * 0.5,
+            size: 3 + Math.random() * 4,
             hue: 50, // bright gold
           });
         }
+        // Shockwave ring at bonus zone
+        this.shockwaves.push({ x: cx, y: cy, radius: 0, maxRadius: bz.radius * config.cell * 3, life: 0, maxLife: 0.5, color: "#ffdd44" });
       }
     }
   }
@@ -2072,6 +2161,15 @@ export class Game {
     for (let i = this.enemyExplosions.length - 1; i >= 0; i--) {
       const e = this.enemyExplosions[i];
       e.time -= dt;
+      // Transition from fly to impact at 40% through the animation
+      const progress = 1 - e.time / e.maxTime;
+      if (e.phase === "fly" && progress >= 0.4) {
+        e.phase = "impact";
+        e.impactTime = 0;
+      }
+      if (e.phase === "impact") {
+        e.impactTime += dt;
+      }
       if (e.time <= 0) {
         this.enemyExplosions.splice(i, 1);
       }
@@ -2083,13 +2181,13 @@ export class Game {
     this.enemyExplosions.push({
       x, y,
       color: color || "#ff6622",
-      time: 1.2 * s,
-      maxTime: 1.2 * s,
+      time: 1.8 * s,
+      maxTime: 1.8 * s,
       radius: (20 + Math.random() * 15) * s,
-      // "Fly towards camera" effect: starts small, scales up massively
-      flyScale: 0,
       spikeCount: 10 + Math.floor(Math.random() * 8),
       spinAngle: Math.random() * Math.PI * 2,
+      phase: "fly", // "fly" then "impact"
+      impactTime: 0, // time spent in impact phase
     });
   }
 
@@ -2282,6 +2380,7 @@ export class Game {
       weatherParticles: this.weatherParticles,
       enemyExplosions: this.enemyExplosions,
       tireTrackGhosts: this.tireTrackGhosts,
+      bonusZoneFlash: this.bonusZoneFlash,
     };
 
     if (this.rotateForPortrait) {
