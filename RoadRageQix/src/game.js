@@ -5,7 +5,7 @@ import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./power
 import { getThemeForLevel } from "./themes.js";
 import * as audio from "./audio.js";
 
-export const GAME_VERSION = "0.5.0";
+export const GAME_VERSION = "0.6.0";
 
 const AUTOSAVE_KEY = "roadrageqix_autosave";
 const AUTOSAVE_INTERVAL = 5; // seconds between auto-saves
@@ -56,6 +56,7 @@ const ENEMY_VARIANTS = {
   fast: { radiusMul: 0.7, speedMul: 1.4, spikeCount: 10, color: "#44ddff" },
   tracker: { radiusMul: 0.85, speedMul: 1.0, spikeCount: 12, color: "#ff44cc" },
   charger: { radiusMul: 1.15, speedMul: 0.9, spikeCount: 18, color: "#ff3333" },
+  boss: { radiusMul: 2.2, speedMul: 0.55, spikeCount: 24, color: "#ffaa00" },
 };
 
 function pickEnemyVariant(level, index) {
@@ -72,6 +73,7 @@ function pickEnemyVariant(level, index) {
 
 function buildEnemyWave(count, level) {
   const safeCount = Math.max(1, Math.floor(count));
+  const isBossLevel = level >= 4 && level % 4 === 0;
   const enemies = [];
   const centerX = config.worldWidth * 0.5;
   const centerY = config.worldHeight * 0.5;
@@ -101,6 +103,25 @@ function buildEnemyWave(count, level) {
       enemy.chargeTimeLeft = 0;
     }
     enemies.push(enemy);
+  }
+
+  // Boss levels: add a boss enemy
+  if (isBossLevel) {
+    const bDef = ENEMY_VARIANTS.boss;
+    const boss = createEnemy(centerX, centerY);
+    boss.variant = "boss";
+    boss.radius = Math.round(boss.radius * bDef.radiusMul);
+    boss.spikeCount = bDef.spikeCount;
+    boss.variantColor = bDef.color;
+    boss.bossHP = 3 + Math.floor(level / 4); // 4HP at level 4, 5HP at level 8, etc.
+    boss.bossMaxHP = boss.bossHP;
+    boss.bossPhase = 0; // 0=roam, 1=charge, 2=spin
+    boss.bossPhaseTimer = 3 + Math.random() * 2;
+    const spd = Math.hypot(boss.vx, boss.vy) * bDef.speedMul;
+    const ba = Math.atan2(boss.vy, boss.vx);
+    boss.vx = Math.cos(ba) * spd;
+    boss.vy = Math.sin(ba) * spd;
+    enemies.push(boss);
   }
 
   return enemies;
@@ -421,6 +442,9 @@ export class Game {
     // Enemy explosion effects (screen-space overlays)
     this.enemyExplosions = [];
 
+    // Tire track ghost positions
+    this.tireTrackGhosts = []; // { x, y, angle, age }
+
     // Auto-save timer
     this.autoSaveTimer = 0;
 
@@ -666,6 +690,7 @@ export class Game {
     this.nearMissCooldown = 0;
     this.weatherParticles = [];
     this.enemyExplosions = [];
+    this.tireTrackGhosts = [];
     this.autoSaveTimer = 0;
     this.paused = false;
     this.tutorialShown = false;
@@ -722,6 +747,7 @@ export class Game {
     this.burnZones = [];
     this.claimParticles = [];
     this.weatherParticles = [];
+    this.tireTrackGhosts = [];
     this.levelStartTime = this.elapsedSeconds;
     this.decayTimer = 0;
     this.fuseTimer = 0;
@@ -904,6 +930,7 @@ export class Game {
     this.updateNearMiss(effectiveDt);
     this.updateWeather(dt);
     this.updateEnemyExplosions(dt);
+    this.updateTireTrackGhosts(dt);
     this.updateAutoSave(dt);
     this.detectDamage();
 
@@ -1117,6 +1144,24 @@ export class Game {
       navigator.vibrate(25);
     }
 
+    // Boss takes damage from large territory claims (>8%)
+    if (claimDelta > 0.08) {
+      for (const enemy of this.state.enemies) {
+        if (enemy.variant === "boss" && !enemy.dead && enemy.bossHP > 0) {
+          enemy.bossHP -= 1;
+          this.screenShake = 0.6;
+          this.screenShakeTime = 0.15;
+          this.spawnEnemyExplosion(enemy.x, enemy.y, enemy.variantColor);
+          if (enemy.bossHP <= 0) {
+            enemy.dead = true;
+            enemy.respawnTimer = 999;
+            this.addScore(2000);
+            this.spawnEnemyExplosion(enemy.x, enemy.y, "#ffffff");
+          }
+        }
+      }
+    }
+
     for (const enemy of this.state.enemies) {
       const enemyCell = cellToIndex(
         toCell(enemy.x, config.cell, cols - 1),
@@ -1202,14 +1247,36 @@ export class Game {
       audio.playBomb();
       this.screenShake = 0.8;
       this.screenShakeTime = 0.3;
+      const deadEnemies = [];
       for (const enemy of this.state.enemies) {
+        if (enemy.dead) continue;
         // Shockwave ring per enemy
         this.shockwaves.push({ x: enemy.x, y: enemy.y, radius: 0, maxRadius: enemy.radius * 4, life: 0, maxLife: 0.5, color: enemy.variantColor || "#ff6622" });
-        enemy.dead = true;
-        enemy.respawnTimer = 5;
+        if (enemy.variant === "boss") {
+          // Boss takes 1 HP damage from bomb
+          enemy.bossHP = Math.max(0, (enemy.bossHP || 1) - 1);
+          if (enemy.bossHP <= 0) {
+            enemy.dead = true;
+            enemy.respawnTimer = 999; // Boss doesn't respawn
+            deadEnemies.push(enemy);
+          } else {
+            // Stun boss briefly
+            enemy.stunTimer = 1.5;
+            enemy.preStunVx = enemy.vx;
+            enemy.preStunVy = enemy.vy;
+            enemy.vx = 0;
+            enemy.vy = 0;
+          }
+        } else {
+          enemy.dead = true;
+          enemy.respawnTimer = 5;
+          deadEnemies.push(enemy);
+        }
         enemy.vx = 0;
         enemy.vy = 0;
       }
+      // Chain reactions: enemies close together explode bigger
+      this.processChainReactions(deadEnemies);
       this.state.sparks.length = 0;
       this.bombsUsedThisRun += 1;
       if (this.bombsUsedThisRun >= 3) this.checkAchievement("bomb_squad");
@@ -1295,6 +1362,45 @@ export class Game {
         }
       }
 
+      // Boss variant: multi-phase AI
+      if (enemy.variant === "boss") {
+        enemy.bossPhaseTimer -= dt;
+        if (enemy.bossPhaseTimer <= 0) {
+          // Cycle phases: roam -> charge -> spin -> roam
+          enemy.bossPhase = (enemy.bossPhase + 1) % 3;
+          if (enemy.bossPhase === 0) {
+            enemy.bossPhaseTimer = 3 + Math.random() * 2;
+          } else if (enemy.bossPhase === 1) {
+            // Charge at player
+            enemy.bossPhaseTimer = 0.8;
+            const dx = playerX - enemy.x;
+            const dy = playerY - enemy.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 1) {
+              const chargeSpd = config.enemySpeedMax * 1.8;
+              enemy.vx = (dx / dist) * chargeSpd;
+              enemy.vy = (dy / dist) * chargeSpd;
+            }
+          } else {
+            // Spin phase: fast rotation, moderate tracking
+            enemy.bossPhaseTimer = 2 + Math.random();
+          }
+        }
+
+        // Spin phase: gentle tracking + fast spin
+        if (enemy.bossPhase === 2) {
+          const dx = playerX - enemy.x;
+          const dy = playerY - enemy.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 1) {
+            const nudge = 50 * dt;
+            enemy.vx += (dx / dist) * nudge;
+            enemy.vy += (dy / dist) * nudge;
+          }
+          enemy.spin += dt * 18;
+        }
+      }
+
       // Tracker variant: nudge toward player
       if (enemy.variant === "tracker") {
         const dx = playerX - enemy.x;
@@ -1366,8 +1472,9 @@ export class Game {
         this.screenShakeTime = Math.max(this.screenShakeTime, 0.08);
       }
 
-      // Don't normalize charger while charging
-      if (!(enemy.variant === "charger" && enemy.charging)) {
+      // Don't normalize charger while charging or boss during charge phase
+      if (!(enemy.variant === "charger" && enemy.charging) &&
+          !(enemy.variant === "boss" && enemy.bossPhase === 1)) {
         this.normalizeEnemySpeed(enemy);
       }
 
@@ -1936,6 +2043,30 @@ export class Game {
     }
   }
 
+  /** Tire track ghost: faint afterimage of player path */
+  updateTireTrackGhosts(dt) {
+    const player = this.state.player;
+    const speed = Math.hypot(player.vx, player.vy);
+
+    // Spawn a ghost every ~8px of movement
+    if (speed > 30) {
+      const last = this.tireTrackGhosts[this.tireTrackGhosts.length - 1];
+      const dist = last ? Math.hypot(player.x - last.x, player.y - last.y) : 999;
+      if (dist > 8) {
+        this.tireTrackGhosts.push({ x: player.x, y: player.y, angle: player.angle, age: 0 });
+        if (this.tireTrackGhosts.length > 80) this.tireTrackGhosts.shift();
+      }
+    }
+
+    // Age and cull
+    for (let i = this.tireTrackGhosts.length - 1; i >= 0; i--) {
+      this.tireTrackGhosts[i].age += dt;
+      if (this.tireTrackGhosts[i].age > 2.5) {
+        this.tireTrackGhosts.splice(i, 1);
+      }
+    }
+  }
+
   /** Enemy explosion overlay effects */
   updateEnemyExplosions(dt) {
     for (let i = this.enemyExplosions.length - 1; i >= 0; i--) {
@@ -1947,14 +2078,48 @@ export class Game {
     }
   }
 
-  spawnEnemyExplosion(x, y, color) {
+  spawnEnemyExplosion(x, y, color, scale) {
+    const s = scale || 1;
     this.enemyExplosions.push({
       x, y,
       color: color || "#ff6622",
-      time: 0.8,
-      maxTime: 0.8,
-      radius: 20 + Math.random() * 15,
+      time: 1.2 * s,
+      maxTime: 1.2 * s,
+      radius: (20 + Math.random() * 15) * s,
+      // "Fly towards camera" effect: starts small, scales up massively
+      flyScale: 0,
+      spikeCount: 10 + Math.floor(Math.random() * 8),
+      spinAngle: Math.random() * Math.PI * 2,
     });
+  }
+
+  /** Chain reactions: nearby dead enemies amplify explosions */
+  processChainReactions(deadEnemies) {
+    const chainRadius = 100;
+    const chainBonus = 150;
+    let chains = 0;
+
+    for (let i = 0; i < deadEnemies.length; i++) {
+      const a = deadEnemies[i];
+      for (let j = i + 1; j < deadEnemies.length; j++) {
+        const b = deadEnemies[j];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        if (dist < chainRadius) {
+          chains++;
+          // Chain explosion at midpoint
+          const mx = (a.x + b.x) * 0.5;
+          const my = (a.y + b.y) * 0.5;
+          this.spawnEnemyExplosion(mx, my, "#ffcc00", 1.5);
+          this.shockwaves.push({ x: mx, y: my, radius: 0, maxRadius: 120, life: 0, maxLife: 0.6, color: "#ffaa00" });
+        }
+      }
+    }
+
+    if (chains > 0) {
+      this.addScore(chains * chainBonus);
+      this.screenShake = Math.min(1, 0.4 + chains * 0.2);
+      this.screenShakeTime = 0.3;
+    }
   }
 
   /** Auto-save current run state */
@@ -2116,6 +2281,7 @@ export class Game {
       fuseBurnIndex: this.fuseBurnIndex,
       weatherParticles: this.weatherParticles,
       enemyExplosions: this.enemyExplosions,
+      tireTrackGhosts: this.tireTrackGhosts,
     };
 
     if (this.rotateForPortrait) {
