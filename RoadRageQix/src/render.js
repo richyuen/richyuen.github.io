@@ -1036,6 +1036,46 @@ function drawStunnedEffect(ctx, enemy, elapsedSeconds) {
   ctx.restore();
 }
 
+function drawBombSlowMoEffect(ctx, canvasWidth, canvasHeight, timeLeft) {
+  if (timeLeft <= 0) return;
+  // Dramatic dark vignette with radial lines
+  const alpha = Math.min(0.4, timeLeft * 0.5);
+  ctx.save();
+
+  // Dark vignette
+  const g = ctx.createRadialGradient(
+    canvasWidth / 2, canvasHeight / 2, canvasWidth * 0.15,
+    canvasWidth / 2, canvasHeight / 2, canvasWidth * 0.7
+  );
+  g.addColorStop(0, "rgba(0, 0, 0, 0)");
+  g.addColorStop(1, `rgba(0, 0, 0, ${alpha})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  // Orange tinted border glow
+  ctx.globalAlpha = alpha * 0.6;
+  ctx.strokeStyle = "rgba(255, 140, 40, 0.5)";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, canvasWidth - 4, canvasHeight - 4);
+
+  // Radial speed lines from center
+  ctx.globalAlpha = alpha * 0.3;
+  ctx.strokeStyle = "rgba(255, 200, 100, 0.4)";
+  ctx.lineWidth = 1.5;
+  const lineCount = 24;
+  for (let i = 0; i < lineCount; i++) {
+    const angle = (i / lineCount) * Math.PI * 2;
+    const innerR = Math.min(canvasWidth, canvasHeight) * 0.3;
+    const outerR = Math.max(canvasWidth, canvasHeight) * 0.7;
+    ctx.beginPath();
+    ctx.moveTo(canvasWidth / 2 + Math.cos(angle) * innerR, canvasHeight / 2 + Math.sin(angle) * innerR);
+    ctx.lineTo(canvasWidth / 2 + Math.cos(angle) * outerR, canvasHeight / 2 + Math.sin(angle) * outerR);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawBonusZoneFlash(ctx, canvasWidth, canvasHeight, flash) {
   if (!flash || flash.time <= 0) return;
   const maxTime = 2.0;
@@ -1691,6 +1731,11 @@ export function renderOverlay(ctx, game) {
   // Enemy explosion overlays (semi-transparent)
   drawEnemyExplosions(ctx, game.enemyExplosions, canvasWidth, canvasHeight,
     game.worldOffsetX, game.worldOffsetY, game.viewScale);
+
+  // Bomb slow-mo dramatic vignette
+  if (game.bombSlowMoTime > 0) {
+    drawBombSlowMoEffect(ctx, canvasWidth, canvasHeight, game.bombSlowMoTime);
+  }
 
   // Achievement flash
   drawAchievementFlash(ctx, canvasWidth, achievementFlash);
