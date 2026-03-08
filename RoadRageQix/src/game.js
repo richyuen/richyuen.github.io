@@ -1048,8 +1048,15 @@ export class Game {
     const nitroSpeedMultiplier = nitro.activeSeconds > 0 ? config.ignitionNitroMultiplier : 1;
     const speedPowerup = this.hasActivePowerup("speed") ? 1.4 : 1;
 
-    player.vx = axis.x * player.speed * nitroSpeedMultiplier * speedPowerup;
-    player.vy = axis.y * player.speed * nitroSpeedMultiplier * speedPowerup;
+    // 4x speed on claimed territory or border walls
+    const curCol = toCell(player.x, config.cell, cols - 1);
+    const curRow = toCell(player.y, config.cell, rows - 1);
+    const curIdx = cellToIndex(curCol, curRow, cols);
+    const onClaimedOrBorder = claimed[curIdx] === 1 || curCol === 0 || curCol === cols - 1 || curRow === 0 || curRow === rows - 1;
+    const territorySpeedMul = onClaimedOrBorder && !player.trailActive ? 4 : 1;
+
+    player.vx = axis.x * player.speed * nitroSpeedMultiplier * speedPowerup * territorySpeedMul;
+    player.vy = axis.y * player.speed * nitroSpeedMultiplier * speedPowerup * territorySpeedMul;
 
     if (axis.x !== 0 || axis.y !== 0) {
       player.angle = Math.atan2(axis.y, axis.x);
@@ -1065,9 +1072,6 @@ export class Game {
     const row = toCell(nextY, config.cell, rows - 1);
     const idx = cellToIndex(col, row, cols);
     const isClaimed = claimed[idx] === 1;
-    const curCol = toCell(player.x, config.cell, cols - 1);
-    const curRow = toCell(player.y, config.cell, rows - 1);
-    const curIdx = cellToIndex(curCol, curRow, cols);
     const currentIsClaimed = claimed[curIdx] === 1;
 
     if (!player.trailActive) {
@@ -1098,9 +1102,10 @@ export class Game {
     if (this.state.trailMask[idx]) {
       const last = this.state.trailCells[this.state.trailCells.length - 1];
       if (last !== idx) {
-        if (!this.hasActivePowerup("shield")) {
-          this.loseLife();
-        }
+        // Hit own trail — close and claim instead of dying
+        this.connectTrailToWall();
+        player.trailActive = false;
+        this.closeTrailAndClaim();
       }
       return;
     }
@@ -1108,9 +1113,10 @@ export class Game {
     this.recordTrailCell(idx);
 
     if (oldX === player.x && oldY === player.y && (axis.x !== 0 || axis.y !== 0)) {
-      if (!this.hasActivePowerup("shield")) {
-        this.loseLife();
-      }
+      // Stuck while trailing — close and claim instead of dying
+      this.connectTrailToWall();
+      player.trailActive = false;
+      this.closeTrailAndClaim();
     }
   }
 
