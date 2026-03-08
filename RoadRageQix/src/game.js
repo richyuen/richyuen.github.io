@@ -5,7 +5,7 @@ import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./power
 import { getThemeForLevel } from "./themes.js";
 import * as audio from "./audio.js";
 
-export const GAME_VERSION = "0.9.0";
+export const GAME_VERSION = "1.0.0";
 
 const AUTOSAVE_KEY = "roadrageqix_autosave";
 const AUTOSAVE_INTERVAL = 5; // seconds between auto-saves
@@ -235,14 +235,32 @@ function floodFromEnemies(claimed, enemies) {
   return floodBuffer;
 }
 
-/** Car skins */
+/** Car skins — now with gameplay stats */
 export const CAR_SKINS = [
-  { id: "default", name: "Rusty Red", body: "#82311d", accent: "#5f2617", threshold: 0 },
-  { id: "chrome", name: "Chrome", body: "#888899", accent: "#666677", threshold: 5000 },
-  { id: "midnight", name: "Midnight", body: "#223355", accent: "#112244", threshold: 15000 },
-  { id: "toxic", name: "Toxic Green", body: "#22aa66", accent: "#118844", threshold: 30000 },
-  { id: "gold", name: "Gold Rush", body: "#ddaa33", accent: "#bb8822", threshold: 50000 },
+  { id: "default", name: "Rusty Red", body: "#82311d", accent: "#5f2617", threshold: 0, speedMul: 1, radiusMul: 1, nitroDurMul: 1 },
+  { id: "chrome", name: "Chrome", body: "#888899", accent: "#666677", threshold: 5000, speedMul: 1.08, radiusMul: 0.95, nitroDurMul: 1 },
+  { id: "midnight", name: "Midnight", body: "#223355", accent: "#112244", threshold: 15000, speedMul: 1.15, radiusMul: 0.9, nitroDurMul: 1.1 },
+  { id: "toxic", name: "Toxic Green", body: "#22aa66", accent: "#118844", threshold: 30000, speedMul: 1.05, radiusMul: 1, nitroDurMul: 1.3 },
+  { id: "gold", name: "Gold Rush", body: "#ddaa33", accent: "#bb8822", threshold: 50000, speedMul: 1.2, radiusMul: 0.85, nitroDurMul: 1.2 },
+  { id: "phantom", name: "Phantom", body: "#443366", accent: "#332255", threshold: 80000, speedMul: 1.25, radiusMul: 0.8, nitroDurMul: 1.15 },
+  { id: "inferno", name: "Inferno", body: "#cc2200", accent: "#991100", threshold: 120000, speedMul: 1.1, radiusMul: 1, nitroDurMul: 1.5 },
 ];
+
+/** Skill tree — permanent upgrades bought with cumulative score */
+export const SKILL_TREE = [
+  { id: "speed1", name: "Turbo I", desc: "+10% base speed", cost: 5000, effect: { speedMul: 1.1 } },
+  { id: "speed2", name: "Turbo II", desc: "+20% base speed", cost: 20000, requires: "speed1", effect: { speedMul: 1.2 } },
+  { id: "lives1", name: "Reinforced", desc: "+1 starting life", cost: 8000, effect: { extraLives: 1 } },
+  { id: "lives2", name: "Armored", desc: "+2 starting lives", cost: 30000, requires: "lives1", effect: { extraLives: 2 } },
+  { id: "nitro1", name: "Fuel Tank I", desc: "+30% nitro duration", cost: 6000, effect: { nitroDurMul: 1.3 } },
+  { id: "nitro2", name: "Fuel Tank II", desc: "+60% nitro duration", cost: 25000, requires: "nitro1", effect: { nitroDurMul: 1.6 } },
+  { id: "bomb1", name: "Ammo Crate", desc: "Start with 2 bombs", cost: 10000, effect: { startBombs: 2 } },
+  { id: "bomb2", name: "Arsenal", desc: "Start with 3 bombs", cost: 35000, requires: "bomb1", effect: { startBombs: 3 } },
+  { id: "magnet1", name: "Magnet Range", desc: "Powerup collect radius +50%", cost: 7000, effect: { collectRadiusMul: 1.5 } },
+  { id: "combo1", name: "Combo Master", desc: "Combo timer +2s", cost: 12000, effect: { comboTimerBonus: 2 } },
+];
+
+const SKILL_TREE_KEY = "roadrageqix_skills";
 
 /** Achievements */
 export const ACHIEVEMENTS = [
@@ -322,6 +340,27 @@ function loadSettings() {
 }
 function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
+}
+
+function loadSkills() {
+  try { return JSON.parse(localStorage.getItem(SKILL_TREE_KEY)) || []; } catch { return []; }
+}
+function saveSkills(skills) {
+  try { localStorage.setItem(SKILL_TREE_KEY, JSON.stringify(skills)); } catch {}
+}
+function getSkillEffect(unlockedSkills) {
+  const effect = { speedMul: 1, extraLives: 0, nitroDurMul: 1, startBombs: 1, collectRadiusMul: 1, comboTimerBonus: 0 };
+  for (const skill of SKILL_TREE) {
+    if (!unlockedSkills.includes(skill.id)) continue;
+    const e = skill.effect;
+    if (e.speedMul) effect.speedMul = Math.max(effect.speedMul, e.speedMul);
+    if (e.extraLives) effect.extraLives = Math.max(effect.extraLives, e.extraLives);
+    if (e.nitroDurMul) effect.nitroDurMul = Math.max(effect.nitroDurMul, e.nitroDurMul);
+    if (e.startBombs) effect.startBombs = Math.max(effect.startBombs, e.startBombs);
+    if (e.collectRadiusMul) effect.collectRadiusMul = Math.max(effect.collectRadiusMul, e.collectRadiusMul);
+    if (e.comboTimerBonus) effect.comboTimerBonus = Math.max(effect.comboTimerBonus, e.comboTimerBonus);
+  }
+  return effect;
 }
 
 function saveAutoSave(data) {
@@ -450,6 +489,36 @@ export class Game {
 
     // Auto-save timer
     this.autoSaveTimer = 0;
+
+    // Combo system — escalating multiplier for quick successive claims
+    this.comboTimer = 0;
+    this.comboLevel = 0; // 0=no combo, 1=x1.5, 2=x2, 3=x3, 4=x4, etc.
+
+    // Bomb inventory — collect bombs, press B to use
+    this.bombInventory = 1;
+
+    // Warp tunnels — portal pairs on opposite borders
+    this.warpTunnels = [];
+
+    // Enemy spawner cells — unclaimed zones that spawn enemies
+    this.spawnerCells = [];
+    this.spawnerTimer = 0;
+
+    // Drift trails — skid marks when turning fast
+    this.driftParticles = [];
+
+    // Territory fill animation — paint pour effect
+    this.fillWave = null; // { cells, progress, speed }
+
+    // Skill tree
+    this.unlockedSkills = loadSkills();
+    this.skillEffect = getSkillEffect(this.unlockedSkills);
+
+    // Undo death — snapshot history for rewind
+    this.snapshots = [];
+    this.snapshotInterval = 0.5;
+    this.snapshotTimer = 0;
+    this.undoAvailable = true; // one undo per life
 
     // Settings
     const savedSettings = loadSettings();
@@ -580,7 +649,7 @@ export class Game {
 
     if (this.menuSubtitle) {
       this.menuSubtitle.textContent = inDeathScreen
-        ? `Run ended on level ${this.currentLevel}. Score: ${this.score} | High: ${this.highScore}`
+        ? `Run ended on level ${this.currentLevel}. Score: ${this.score} | High: ${this.highScore} | Total: ${this.cumulativeScore}`
         : "Stake territory before the inferno spike-ball burns your trail.";
     }
 
@@ -680,6 +749,7 @@ export class Game {
       audio.startProximityTone();
       audio.startReverb();
     }, 150);
+    this.skillEffect = getSkillEffect(this.unlockedSkills);
     this.currentLevel = 1;
     this.currentEnemyCount = this.selectedEnemyCount;
     this.score = 0;
@@ -714,14 +784,29 @@ export class Game {
     this.terrainCacheVersion += 1;
     this.bonusZones = [];
     this.bonusZoneFlash = null;
+    // New systems
+    this.comboTimer = 0;
+    this.comboLevel = 0;
+    this.bombInventory = this.skillEffect.startBombs;
+    this.warpTunnels = [];
+    this.spawnerCells = [];
+    this.spawnerTimer = 0;
+    this.driftParticles = [];
+    this.fillWave = null;
+    this.snapshots = [];
+    this.snapshotTimer = 0;
+    this.undoAvailable = true;
     clearAutoSave();
+    const startLives = config.initialLives + this.skillEffect.extraLives;
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
-      lives: config.initialLives,
+      lives: startLives,
       mode: "playing",
       level: this.currentLevel,
     });
     this.spawnBonusZones();
+    this.spawnWarpTunnels();
+    this.spawnSpawnerCells();
     this.syncMenuVisibility();
   }
 
@@ -746,6 +831,7 @@ export class Game {
     }, 150);
 
     // Keep current level and enemy count, reset score and lives
+    this.skillEffect = getSkillEffect(this.unlockedSkills);
     this.score = 0;
     this.comboCount = 0;
     this.scoreMultiplier = 1;
@@ -778,14 +864,28 @@ export class Game {
     this.terrainCacheVersion += 1;
     this.bonusZones = [];
     this.bonusZoneFlash = null;
+    this.comboTimer = 0;
+    this.comboLevel = 0;
+    this.bombInventory = this.skillEffect.startBombs;
+    this.warpTunnels = [];
+    this.spawnerCells = [];
+    this.spawnerTimer = 0;
+    this.driftParticles = [];
+    this.fillWave = null;
+    this.snapshots = [];
+    this.snapshotTimer = 0;
+    this.undoAvailable = true;
     clearAutoSave();
+    const startLives = config.initialLives + this.skillEffect.extraLives;
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
-      lives: config.initialLives,
+      lives: startLives,
       mode: "playing",
       level: this.currentLevel,
     });
     this.spawnBonusZones();
+    this.spawnWarpTunnels();
+    this.spawnSpawnerCells();
     this.syncMenuVisibility();
   }
 
@@ -827,21 +927,41 @@ export class Game {
     this.weatherParticles = [];
     this.tireTrackGhosts = [];
     this.levelStartTime = this.elapsedSeconds;
+    this.driftParticles = [];
+    this.fillWave = null;
+    this.snapshots = [];
+    this.snapshotTimer = 0;
+    this.undoAvailable = true;
 
     this.fuseTimer = 0;
     this.fuseBurnIndex = 0;
     this.nearMissTime = 0;
+    // Keep enemy count modest; spawner cells handle scaling
     this.state = this.createFreshState({
-      enemyCount: this.currentEnemyCount,
+      enemyCount: Math.min(this.currentEnemyCount, 4),
       lives: preservedLives,
       mode: "playing",
       level: this.currentLevel,
     });
     this.spawnBonusZones();
+    this.spawnWarpTunnels();
+    this.spawnSpawnerCells();
     this.syncMenuVisibility();
   }
 
   loseLife() {
+    // Undo death: if available, rewind instead of dying
+    if (this.undoAvailable && this.snapshots.length > 0) {
+      this.undoAvailable = false;
+      this.restoreSnapshot();
+      this.screenShake = 0.5;
+      this.screenShakeTime = 0.15;
+      this.damageFlash = 0.2;
+      this.state.player.invuln = config.playerInvulnSeconds * 2;
+      audio.playDamage();
+      return;
+    }
+
     this.state.lives -= 1;
     clearMask(this.state.trailMask, this.state.trailCells);
     this.state.player.trailActive = false;
@@ -849,6 +969,8 @@ export class Game {
     this.screenShakeTime = 0.2;
     this.damageFlash = 0.35;
     this.comboCount = 0;
+    this.comboTimer = 0;
+    this.comboLevel = 0;
     this.streakCount = 0;
 
     // Kill cam slow-mo
@@ -886,6 +1008,9 @@ export class Game {
       return;
     }
 
+    // Reset undo for next life
+    this.undoAvailable = true;
+    this.snapshots = [];
     this.resetPlayer();
     this.state.player.invuln = config.playerInvulnSeconds;
   }
@@ -920,7 +1045,8 @@ export class Game {
   addScore(points) {
     const multiActive = this.state.activePowerups.some(p => p.type === "scoreMulti");
     const multi = multiActive ? 2 : 1;
-    this.score += Math.round(points * multi * (1 + this.comboCount * 0.25));
+    const comboMul = 1 + this.comboLevel * 0.5; // combo: x1, x1.5, x2, x2.5...
+    this.score += Math.round(points * multi * comboMul * (1 + this.comboCount * 0.25));
   }
 
   hasActivePowerup(type) {
@@ -1016,6 +1142,11 @@ export class Game {
     this.updateWeather(dt);
     this.updateEnemyExplosions(dt);
     this.updateTireTrackGhosts(dt);
+    this.updateComboTimer(dt);
+    this.updateSpawnerCells(dt);
+    this.updateDriftParticles(dt);
+    this.updateFillWave(dt);
+    this.updateSnapshots(dt);
     this.updateAutoSave(dt);
     this.detectDamage();
 
@@ -1043,8 +1174,16 @@ export class Game {
   }
 
   updatePlayer(dt, input) {
+    // Bomb use: press B to deploy a bomb from inventory
+    if (input.consume("KeyB")) {
+      this.useBomb();
+    }
+
     const axis = input.axis();
     const { player, claimed, nitro } = this.state;
+    const carSkin = this.getCarSkin();
+    const carSpeedMul = carSkin.speedMul || 1;
+    const skillSpeedMul = this.skillEffect.speedMul;
     const nitroSpeedMultiplier = nitro.activeSeconds > 0 ? config.ignitionNitroMultiplier : 1;
     const speedPowerup = this.hasActivePowerup("speed") ? 1.4 : 1;
 
@@ -1055,8 +1194,9 @@ export class Game {
     const onClaimedOrBorder = claimed[curIdx] === 1 || curCol === 0 || curCol === cols - 1 || curRow === 0 || curRow === rows - 1;
     const territorySpeedMul = onClaimedOrBorder && !player.trailActive ? 4 : 1;
 
-    player.vx = axis.x * player.speed * nitroSpeedMultiplier * speedPowerup * territorySpeedMul;
-    player.vy = axis.y * player.speed * nitroSpeedMultiplier * speedPowerup * territorySpeedMul;
+    const prevAngle = player.angle;
+    player.vx = axis.x * player.speed * nitroSpeedMultiplier * speedPowerup * territorySpeedMul * carSpeedMul * skillSpeedMul;
+    player.vy = axis.y * player.speed * nitroSpeedMultiplier * speedPowerup * territorySpeedMul * carSpeedMul * skillSpeedMul;
 
     if (axis.x !== 0 || axis.y !== 0) {
       player.angle = Math.atan2(axis.y, axis.x);
@@ -1118,6 +1258,26 @@ export class Game {
       player.trailActive = false;
       this.closeTrailAndClaim();
     }
+
+    // Warp tunnel teleport
+    this.checkWarpTunnels();
+
+    // Drift particles when turning fast on borders
+    const speed = Math.hypot(player.vx, player.vy);
+    const angleDiff = Math.abs(player.angle - prevAngle);
+    if (speed > 300 && angleDiff > 0.3 && onClaimedOrBorder && this.driftParticles.length < 60) {
+      for (let i = 0; i < 3; i++) {
+        this.driftParticles.push({
+          x: player.x + (Math.random() - 0.5) * 8,
+          y: player.y + (Math.random() - 0.5) * 8,
+          vx: -player.vx * 0.1 + (Math.random() - 0.5) * 40,
+          vy: -player.vy * 0.1 + (Math.random() - 0.5) * 40 - 20,
+          life: 0,
+          maxLife: 0.6 + Math.random() * 0.4,
+          size: 3 + Math.random() * 5,
+        });
+      }
+    }
   }
 
   updateNitro(dt, input) {
@@ -1147,7 +1307,8 @@ export class Game {
       return false;
     }
 
-    nitro.activeSeconds = config.ignitionNitroDuration;
+    const carSkin = this.getCarSkin();
+    nitro.activeSeconds = config.ignitionNitroDuration * (carSkin.nitroDurMul || 1) * this.skillEffect.nitroDurMul;
     this.screenShake = Math.max(this.screenShake, 0.26);
     this.screenShakeTime = Math.max(this.screenShakeTime, 0.1);
     audio.playNitro();
@@ -1236,6 +1397,15 @@ export class Game {
 
     // Claim animation timer
     this.claimFlashTime = 0.4;
+
+    // Territory fill animation — paint pour wave
+    if (this.claimFlashCells.length > 4) {
+      this.fillWave = { cells: [...this.claimFlashCells], progress: 0, speed: 3 };
+    }
+
+    // Combo system — reset timer and increase level
+    this.comboTimer = 4 + this.skillEffect.comboTimerBonus;
+    this.comboLevel = Math.min(this.comboLevel + 1, 8);
 
     // Spawn claim particles along new edge segments
     this.spawnClaimParticles();
@@ -1350,10 +1520,11 @@ export class Game {
       pu.pulse += dt * 3;
       if (pu.life >= pu.maxLife) continue;
 
-      // Player collision
+      // Player collision (skill magnet extends range)
       const dx = player.x - pu.x;
       const dy = player.y - pu.y;
-      if (dx * dx + dy * dy <= (player.radius + pu.radius) * (player.radius + pu.radius)) {
+      const collectRadius = (player.radius + pu.radius) * this.skillEffect.collectRadiusMul;
+      if (dx * dx + dy * dy <= collectRadius * collectRadius) {
         this.collectPowerup(pu);
         continue;
       }
@@ -1425,58 +1596,9 @@ export class Game {
       }
       this.addScore(150);
     } else if (pu.type === "bomb") {
-      // If trail is active, close it first so territory gets claimed before enemies die
-      if (this.state.player.trailActive && this.state.trailCells.length >= 2) {
-        // Connect trail end back to nearest claimed cell to form a closed loop
-        this.connectTrailToWall();
-        this.state.player.trailActive = false;
-        this.closeTrailAndClaim();
-      }
-      // Bomb: kill all enemies (respawn after 5s), clear sparks
-      audio.playBomb();
-      this.screenShake = 0.8;
-      this.screenShakeTime = 0.3;
-      const deadEnemies = [];
-      for (const enemy of this.state.enemies) {
-        if (enemy.dead) continue;
-        // Shockwave ring per enemy
-        this.shockwaves.push({ x: enemy.x, y: enemy.y, radius: 0, maxRadius: enemy.radius * 4, life: 0, maxLife: 0.5, color: enemy.variantColor || "#ff6622" });
-        if (enemy.variant === "boss") {
-          // Boss takes 1 HP damage from bomb
-          enemy.bossHP = Math.max(0, (enemy.bossHP || 1) - 1);
-          if (enemy.bossHP <= 0) {
-            enemy.dead = true;
-            enemy.respawnTimer = 999; // Boss doesn't respawn
-            deadEnemies.push(enemy);
-          } else {
-            // Stun boss briefly
-            enemy.stunTimer = 1.5;
-            enemy.preStunVx = enemy.vx;
-            enemy.preStunVy = enemy.vy;
-            enemy.vx = 0;
-            enemy.vy = 0;
-          }
-        } else {
-          enemy.dead = true;
-          enemy.respawnTimer = 5;
-          deadEnemies.push(enemy);
-        }
-        enemy.vx = 0;
-        enemy.vy = 0;
-      }
-      // Spawn fly-at-screen explosions for each dead enemy
-      for (const enemy of deadEnemies) {
-        this.spawnEnemyExplosion(enemy.x, enemy.y, enemy.variantColor,
-          enemy.variant === "boss" ? 1.8 : 1);
-      }
-      // Chain reactions: enemies close together explode bigger
-      this.processChainReactions(deadEnemies);
-      // Dramatic slow-mo for bomb
-      this.bombSlowMoTime = 0.8;
-      this.state.sparks.length = 0;
-      this.bombsUsedThisRun += 1;
-      if (this.bombsUsedThisRun >= 3) this.checkAchievement("bomb_squad");
-      this.addScore(300);
+      // Add bomb to inventory instead of using immediately
+      this.bombInventory += 1;
+      this.addScore(100);
     } else {
       const effect = createActivePowerupEffect(pu.type);
       if (effect) {
@@ -2312,6 +2434,273 @@ export class Game {
   }
 
   /** Auto-save current run state */
+  // ===== NEW FEATURE METHODS =====
+
+  /** Combo timer: decays over time, resets on claim */
+  updateComboTimer(dt) {
+    if (this.comboTimer > 0) {
+      this.comboTimer -= dt;
+      if (this.comboTimer <= 0) {
+        this.comboTimer = 0;
+        this.comboLevel = 0;
+      }
+    }
+  }
+
+  /** Use bomb from inventory */
+  useBomb() {
+    if (this.bombInventory <= 0 || this.state.mode !== "playing") return;
+    this.bombInventory -= 1;
+
+    // If trail is active, close it first
+    if (this.state.player.trailActive && this.state.trailCells.length >= 2) {
+      this.connectTrailToWall();
+      this.state.player.trailActive = false;
+      this.closeTrailAndClaim();
+    }
+
+    audio.playBomb();
+    this.screenShake = 0.8;
+    this.screenShakeTime = 0.3;
+    const deadEnemies = [];
+    for (const enemy of this.state.enemies) {
+      if (enemy.dead) continue;
+      this.shockwaves.push({ x: enemy.x, y: enemy.y, radius: 0, maxRadius: enemy.radius * 4, life: 0, maxLife: 0.5, color: enemy.variantColor || "#ff6622" });
+      if (enemy.variant === "boss") {
+        enemy.bossHP = Math.max(0, (enemy.bossHP || 1) - 1);
+        if (enemy.bossHP <= 0) {
+          enemy.dead = true;
+          enemy.respawnTimer = 999;
+          deadEnemies.push(enemy);
+        } else {
+          enemy.stunTimer = 1.5;
+          enemy.preStunVx = enemy.vx;
+          enemy.preStunVy = enemy.vy;
+          enemy.vx = 0;
+          enemy.vy = 0;
+        }
+      } else {
+        enemy.dead = true;
+        enemy.respawnTimer = 999; // Permanent kill
+        deadEnemies.push(enemy);
+      }
+      enemy.vx = 0;
+      enemy.vy = 0;
+    }
+    for (const enemy of deadEnemies) {
+      this.spawnEnemyExplosion(enemy.x, enemy.y, enemy.variantColor,
+        enemy.variant === "boss" ? 1.8 : 1);
+    }
+    this.processChainReactions(deadEnemies);
+    this.bombSlowMoTime = 0.8;
+    this.state.sparks.length = 0;
+    this.bombsUsedThisRun += 1;
+    if (this.bombsUsedThisRun >= 3) this.checkAchievement("bomb_squad");
+    this.addScore(300);
+  }
+
+  /** Spawn warp tunnels on opposite borders */
+  spawnWarpTunnels() {
+    this.warpTunnels = [];
+    // Horizontal pair (left <-> right)
+    const hRow = 10 + Math.floor(Math.random() * (rows - 20));
+    this.warpTunnels.push({
+      ax: config.cell * 0.5, ay: (hRow + 0.5) * config.cell,
+      bx: config.worldWidth - config.cell * 0.5, by: (hRow + 0.5) * config.cell,
+      cooldown: 0,
+    });
+    // Vertical pair (top <-> bottom)
+    const vCol = 10 + Math.floor(Math.random() * (cols - 20));
+    this.warpTunnels.push({
+      ax: (vCol + 0.5) * config.cell, ay: config.cell * 0.5,
+      bx: (vCol + 0.5) * config.cell, by: config.worldHeight - config.cell * 0.5,
+      cooldown: 0,
+    });
+  }
+
+  /** Check if player stepped on a warp portal */
+  checkWarpTunnels() {
+    const { player } = this.state;
+    const warpRadius = config.cell * 2;
+    for (const warp of this.warpTunnels) {
+      if (warp.cooldown > 0) continue;
+      const da = Math.hypot(player.x - warp.ax, player.y - warp.ay);
+      const db = Math.hypot(player.x - warp.bx, player.y - warp.by);
+      if (da < warpRadius) {
+        player.x = warp.bx;
+        player.y = warp.by;
+        warp.cooldown = 1.0;
+        audio.playPickup();
+        break;
+      } else if (db < warpRadius) {
+        player.x = warp.ax;
+        player.y = warp.ay;
+        warp.cooldown = 1.0;
+        audio.playPickup();
+        break;
+      }
+    }
+    // Cool down warps
+    for (const warp of this.warpTunnels) {
+      if (warp.cooldown > 0) warp.cooldown -= 1 / 60;
+    }
+  }
+
+  /** Spawn enemy spawner cells — increases with level */
+  spawnSpawnerCells() {
+    this.spawnerCells = [];
+    const count = Math.min(6, Math.floor(this.currentLevel / 2));
+    for (let i = 0; i < count; i++) {
+      for (let a = 0; a < 60; a++) {
+        const col = 5 + Math.floor(Math.random() * (cols - 10));
+        const row = 5 + Math.floor(Math.random() * (rows - 10));
+        const idx = cellToIndex(col, row, cols);
+        if (!this.state.claimed[idx]) {
+          this.spawnerCells.push({
+            col, row, idx,
+            spawnTimer: 8 + Math.random() * 4,
+            maxSpawnTimer: 8 + Math.random() * 4,
+            spawned: 0,
+            maxSpawns: 2 + Math.floor(this.currentLevel / 3),
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  /** Spawner cells periodically create new enemies */
+  updateSpawnerCells(dt) {
+    for (const sc of this.spawnerCells) {
+      // If the spawner cell has been claimed, disable it
+      if (this.state.claimed[sc.idx]) continue;
+      if (sc.spawned >= sc.maxSpawns) continue;
+      sc.spawnTimer -= dt;
+      if (sc.spawnTimer <= 0) {
+        sc.spawnTimer = sc.maxSpawnTimer;
+        sc.spawned += 1;
+        const x = (sc.col + 0.5) * config.cell;
+        const y = (sc.row + 0.5) * config.cell;
+        const variant = pickEnemyVariant(this.currentLevel, sc.spawned);
+        const def = ENEMY_VARIANTS[variant];
+        const enemy = createEnemy(x, y);
+        enemy.variant = variant;
+        enemy.radius = Math.round(enemy.radius * def.radiusMul);
+        enemy.spikeCount = def.spikeCount;
+        enemy.variantColor = def.color;
+        const spd = Math.hypot(enemy.vx, enemy.vy) * def.speedMul;
+        const angle = Math.atan2(enemy.vy, enemy.vx);
+        enemy.vx = Math.cos(angle) * spd;
+        enemy.vy = Math.sin(angle) * spd;
+        if (variant === "charger") {
+          enemy.chargeTimer = 3 + Math.random() * 2;
+          enemy.charging = false;
+          enemy.chargeTimeLeft = 0;
+        }
+        this.state.enemies.push(enemy);
+        this.state.enemyCount = this.state.enemies.length;
+        // Shockwave at spawn point
+        this.shockwaves.push({ x, y, radius: 0, maxRadius: 40, life: 0, maxLife: 0.3, color: "#ff4444" });
+      }
+    }
+  }
+
+  /** Update drift particles */
+  updateDriftParticles(dt) {
+    let write = 0;
+    for (let i = 0; i < this.driftParticles.length; i++) {
+      const p = this.driftParticles[i];
+      p.life += dt;
+      if (p.life >= p.maxLife) continue;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 30 * dt; // gravity
+      p.vx *= 0.96;
+      this.driftParticles[write] = p;
+      write++;
+    }
+    this.driftParticles.length = write;
+  }
+
+  /** Territory fill wave animation */
+  updateFillWave(dt) {
+    if (!this.fillWave) return;
+    this.fillWave.progress += dt * this.fillWave.speed;
+    if (this.fillWave.progress >= 1) {
+      this.fillWave = null;
+    }
+  }
+
+  /** Snapshot system for undo-death rewind */
+  updateSnapshots(dt) {
+    if (this.state.mode !== "playing") return;
+    this.snapshotTimer -= dt;
+    if (this.snapshotTimer > 0) return;
+    this.snapshotTimer = this.snapshotInterval;
+    // Keep last 6 snapshots (~3 seconds)
+    if (this.snapshots.length >= 6) this.snapshots.shift();
+    this.snapshots.push(this.takeSnapshot());
+  }
+
+  takeSnapshot() {
+    const { player, claimed, enemies, lives, claimedPercent } = this.state;
+    return {
+      px: player.x, py: player.y, pAngle: player.angle, trailActive: player.trailActive,
+      claimed: new Uint8Array(claimed),
+      trailCells: [...this.state.trailCells],
+      trailMask: new Uint8Array(this.state.trailMask),
+      enemies: enemies.map(e => ({ x: e.x, y: e.y, vx: e.vx, vy: e.vy, dead: e.dead, variant: e.variant, radius: e.radius })),
+      lives,
+      claimedPercent,
+      score: this.score,
+    };
+  }
+
+  restoreSnapshot() {
+    const snap = this.snapshots.pop();
+    if (!snap) return;
+    this.snapshots = [];
+    const { player } = this.state;
+    player.x = snap.px;
+    player.y = snap.py;
+    player.angle = snap.pAngle;
+    player.trailActive = false;
+    player.vx = 0;
+    player.vy = 0;
+    // Restore claimed territory
+    this.state.claimed.set(snap.claimed);
+    this.state.claimedPercent = snap.claimedPercent;
+    // Clear trail
+    clearMask(this.state.trailMask, this.state.trailCells);
+    // Restore enemy positions
+    for (let i = 0; i < this.state.enemies.length && i < snap.enemies.length; i++) {
+      const e = this.state.enemies[i];
+      const se = snap.enemies[i];
+      e.x = se.x;
+      e.y = se.y;
+      e.vx = se.vx;
+      e.vy = se.vy;
+    }
+    this.terrainCacheVersion += 1;
+    this.score = snap.score;
+    this.burnZones = [];
+  }
+
+  /** Skill tree: buy a skill with cumulative score */
+  buySkill(skillId) {
+    const skill = SKILL_TREE.find(s => s.id === skillId);
+    if (!skill) return false;
+    if (this.unlockedSkills.includes(skillId)) return false;
+    if (skill.requires && !this.unlockedSkills.includes(skill.requires)) return false;
+    if (this.cumulativeScore < skill.cost) return false;
+    this.cumulativeScore -= skill.cost;
+    saveCumulativeScore(this.cumulativeScore);
+    this.unlockedSkills.push(skillId);
+    saveSkills(this.unlockedSkills);
+    this.skillEffect = getSkillEffect(this.unlockedSkills);
+    return true;
+  }
+
   updateAutoSave(dt) {
     this.autoSaveTimer -= dt;
     if (this.autoSaveTimer > 0) return;
@@ -2335,6 +2724,7 @@ export class Game {
       playerY: st.player.y,
       streakCount: this.streakCount,
       bombsUsedThisRun: this.bombsUsedThisRun,
+      bombInventory: this.bombInventory,
       elapsedSeconds: this.elapsedSeconds,
       levelStartTime: this.levelStartTime,
     });
@@ -2352,6 +2742,7 @@ export class Game {
     this.selectedEnemyCount = save.selectedEnemyCount || 1;
     this.streakCount = save.streakCount || 0;
     this.bombsUsedThisRun = save.bombsUsedThisRun || 0;
+    this.bombInventory = save.bombInventory ?? this.skillEffect.startBombs;
     this.elapsedSeconds = save.elapsedSeconds || 0;
     this.levelStartTime = save.levelStartTime || 0;
     this.currentTheme = getThemeForLevel(this.currentLevel);
@@ -2475,6 +2866,15 @@ export class Game {
       bombSlowMoTime: this.bombSlowMoTime,
       shrinkActive: this.hasActivePowerup("shrink"),
       freezeActive: this.hasActivePowerup("freeze"),
+      comboLevel: this.comboLevel,
+      comboTimer: this.comboTimer,
+      bombInventory: this.bombInventory,
+      warpTunnels: this.warpTunnels,
+      spawnerCells: this.spawnerCells,
+      driftParticles: this.driftParticles,
+      fillWave: this.fillWave,
+      undoAvailable: this.undoAvailable,
+      skillEffect: this.skillEffect,
     };
 
     if (this.rotateForPortrait) {
