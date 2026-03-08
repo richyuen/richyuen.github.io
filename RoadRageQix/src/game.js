@@ -1238,6 +1238,8 @@ export class Game {
       }
       if (currentIsClaimed && (axis.x !== 0 || axis.y !== 0)) {
         player.trailActive = true;
+        // Record the starting claimed cell so trail connects to the border
+        this.recordTrailCell(curIdx);
         player.x = nextX;
         player.y = nextY;
         this.recordTrailCell(idx);
@@ -1258,6 +1260,8 @@ export class Game {
     player.y = nextY;
 
     if (isClaimed) {
+      // Record the ending claimed cell so trail connects to the border
+      this.recordTrailCell(idx);
       player.trailActive = false;
       this.closeTrailAndClaim();
       return;
@@ -1345,6 +1349,7 @@ export class Game {
   }
 
   recordTrailCell(idx) {
+    if (this.state.trailMask[idx]) return; // avoid duplicates
     this.state.trailMask[idx] = 1;
     this.state.trailCells.push(idx);
   }
@@ -1391,7 +1396,7 @@ export class Game {
   }
 
   closeTrailAndClaim() {
-    if (this.state.trailCells.length < 2) {
+    if (this.state.trailCells.length < 3) {
       clearMask(this.state.trailMask, this.state.trailCells);
       return;
     }
