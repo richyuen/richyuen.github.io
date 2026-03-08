@@ -5,7 +5,7 @@ import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./power
 import { getThemeForLevel } from "./themes.js";
 import * as audio from "./audio.js";
 
-export const GAME_VERSION = "1.0.0";
+export const GAME_VERSION = "1.1.0";
 
 const AUTOSAVE_KEY = "roadrageqix_autosave";
 const AUTOSAVE_INTERVAL = 5; // seconds between auto-saves
@@ -193,17 +193,30 @@ function getEnemyOpenStartIndex(claimed, enemy) {
   return startIdx;
 }
 
-function floodFromEnemies(claimed, enemies) {
+function floodFromEnemies(claimed, enemies, spawnerCells) {
   floodBuffer.fill(0);
   const queue = [];
 
   for (const enemy of enemies) {
+    if (enemy.dead) continue; // Skip dead enemies
     const startIdx = getEnemyOpenStartIndex(claimed, enemy);
     if (startIdx === null || floodBuffer[startIdx]) {
       continue;
     }
     floodBuffer[startIdx] = 1;
     queue.push(startIdx);
+  }
+
+  // Also flood from active spawner cells
+  if (spawnerCells) {
+    for (const sc of spawnerCells) {
+      if (claimed[sc.idx]) continue;
+      if (sc.spawned >= sc.maxSpawns) continue;
+      if (!floodBuffer[sc.idx]) {
+        floodBuffer[sc.idx] = 1;
+        queue.push(sc.idx);
+      }
+    }
   }
 
   let head = 0;
@@ -503,9 +516,13 @@ export class Game {
     // Enemy spawner cells — unclaimed zones that spawn enemies
     this.spawnerCells = [];
     this.spawnerTimer = 0;
+    this.turrets = [];
+    this.turretProjectiles = [];
+    this.turretSpawnTimer = 0;
 
     // Drift trails — skid marks when turning fast
     this.driftParticles = [];
+    this.debrisParticles = [];
 
     // Territory fill animation — paint pour effect
     this.fillWave = null; // { cells, progress, speed }
@@ -791,7 +808,11 @@ export class Game {
     this.warpTunnels = [];
     this.spawnerCells = [];
     this.spawnerTimer = 0;
+    this.turrets = [];
+    this.turretProjectiles = [];
+    this.turretSpawnTimer = 0;
     this.driftParticles = [];
+    this.debrisParticles = [];
     this.fillWave = null;
     this.snapshots = [];
     this.snapshotTimer = 0;
@@ -870,7 +891,11 @@ export class Game {
     this.warpTunnels = [];
     this.spawnerCells = [];
     this.spawnerTimer = 0;
+    this.turrets = [];
+    this.turretProjectiles = [];
+    this.turretSpawnTimer = 0;
     this.driftParticles = [];
+    this.debrisParticles = [];
     this.fillWave = null;
     this.snapshots = [];
     this.snapshotTimer = 0;
@@ -928,6 +953,7 @@ export class Game {
     this.tireTrackGhosts = [];
     this.levelStartTime = this.elapsedSeconds;
     this.driftParticles = [];
+    this.debrisParticles = [];
     this.fillWave = null;
     this.snapshots = [];
     this.snapshotTimer = 0;
@@ -1144,7 +1170,9 @@ export class Game {
     this.updateTireTrackGhosts(dt);
     this.updateComboTimer(dt);
     this.updateSpawnerCells(dt);
+    this.updateTurrets(dt);
     this.updateDriftParticles(dt);
+    this.updateDebris(dt);
     this.updateFillWave(dt);
     this.updateSnapshots(dt);
     this.updateAutoSave(dt);
@@ -1221,6 +1249,14 @@ export class Game {
         return;
       }
       if (currentIsClaimed && (axis.x !== 0 || axis.y !== 0)) {
+        player.trailActive = true;
+        player.x = nextX;
+        player.y = nextY;
+        this.recordTrailCell(idx);
+        return;
+      }
+      // If player is on unclaimed territory (e.g., after bomb), allow free movement
+      if (!currentIsClaimed && (axis.x !== 0 || axis.y !== 0)) {
         player.trailActive = true;
         player.x = nextX;
         player.y = nextY;
@@ -1383,7 +1419,7 @@ export class Game {
     }
     this.state.trailCells.length = 0;
 
-    const reachable = floodFromEnemies(this.state.claimed, this.state.enemies);
+    const reachable = floodFromEnemies(this.state.claimed, this.state.enemies, this.spawnerCells);
     forEachInterior(cols, rows, (col, row) => {
       const idx = cellToIndex(col, row, cols);
       if (!this.state.claimed[idx] && !reachable[idx]) {
@@ -2402,6 +2438,8 @@ export class Game {
       phase: "fly", // "fly" then "impact"
       impactTime: 0, // time spent in impact phase
     });
+    // Spawn explosion debris
+    this.spawnDebris(x, y, color || "#888888");
   }
 
   /** Chain reactions: nearby dead enemies amplify explosions */
@@ -2497,6 +2535,47 @@ export class Game {
     this.bombsUsedThisRun += 1;
     if (this.bombsUsedThisRun >= 3) this.checkAchievement("bomb_squad");
     this.addScore(300);
+
+    // Post-bomb auto-claim: claim all areas not reachable from live enemies/spawners
+    this.postBombClaim();
+
+    // If player is stuck on unclaimed territory, teleport to nearest claimed cell
+    const pCol = toCell(this.state.player.x, config.cell, cols - 1);
+    const pRow = toCell(this.state.player.y, config.cell, rows - 1);
+    const pIdx = cellToIndex(pCol, pRow, cols);
+    if (!this.state.claimed[pIdx]) {
+      this.resetPlayer();
+      this.state.player.invuln = config.playerInvulnSeconds;
+    }
+  }
+
+  /** After bomb: claim all unclaimed areas not reachable from live enemies or active spawners */
+  postBombClaim() {
+    const prevPercent = this.state.claimedPercent;
+    const reachable = floodFromEnemies(this.state.claimed, this.state.enemies, this.spawnerCells);
+    const newClaimed = [];
+    forEachInterior(cols, rows, (col, row) => {
+      const idx = cellToIndex(col, row, cols);
+      if (!this.state.claimed[idx] && !reachable[idx]) {
+        this.state.claimed[idx] = 1;
+        newClaimed.push(idx);
+      }
+    });
+    if (newClaimed.length > 0) {
+      this.state.claimedPercent = getClaimedPercent(this.state.claimed);
+      this.terrainCacheVersion += 1;
+      this.claimFlashCells = newClaimed;
+      this.claimFlashTime = 0.5;
+      if (newClaimed.length > 4) {
+        this.fillWave = { cells: [...newClaimed], progress: 0, speed: 2 };
+      }
+      this.spawnClaimParticles();
+      const claimDelta = this.state.claimedPercent - prevPercent;
+      this.addScore(Math.round(claimDelta * 10000));
+      if (this.state.claimedPercent >= config.winClaimPercent) {
+        this.advanceLevel();
+      }
+    }
   }
 
   /** Spawn warp tunnels on opposite borders */
@@ -2606,6 +2685,150 @@ export class Game {
   }
 
   /** Update drift particles */
+  /** Turrets: spawn on claimed edge cells, fire at nearby enemies */
+  updateTurrets(dt) {
+    // Periodically spawn turrets on newly claimed edge cells
+    this.turretSpawnTimer -= dt;
+    if (this.turretSpawnTimer <= 0) {
+      this.turretSpawnTimer = 3;
+      this.refreshTurrets();
+    }
+
+    // Fire projectiles at nearby enemies
+    for (const turret of this.turrets) {
+      turret.cooldown -= dt;
+      if (turret.cooldown > 0) continue;
+      // Check if turret cell is still claimed
+      if (!this.state.claimed[turret.idx]) continue;
+      // Find nearest alive enemy within range
+      let closest = null;
+      let closestDist = 120; // turret range in pixels
+      for (const enemy of this.state.enemies) {
+        if (enemy.dead || enemy.stunTimer > 0) continue;
+        const d = Math.hypot(enemy.x - turret.x, enemy.y - turret.y);
+        if (d < closestDist) {
+          closestDist = d;
+          closest = enemy;
+        }
+      }
+      if (closest) {
+        turret.cooldown = 1.5;
+        const angle = Math.atan2(closest.y - turret.y, closest.x - turret.x);
+        this.turretProjectiles.push({
+          x: turret.x, y: turret.y,
+          vx: Math.cos(angle) * 300,
+          vy: Math.sin(angle) * 300,
+          life: 0, maxLife: 0.5,
+        });
+      }
+    }
+
+    // Update projectiles
+    let write = 0;
+    for (let i = 0; i < this.turretProjectiles.length; i++) {
+      const p = this.turretProjectiles[i];
+      p.life += dt;
+      if (p.life >= p.maxLife) continue;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      // Hit enemies
+      let hit = false;
+      for (const enemy of this.state.enemies) {
+        if (enemy.dead) continue;
+        const d = Math.hypot(enemy.x - p.x, enemy.y - p.y);
+        if (d < enemy.radius + 4) {
+          // Stun enemy briefly
+          enemy.stunTimer = 1.0;
+          enemy.preStunVx = enemy.vx;
+          enemy.preStunVy = enemy.vy;
+          enemy.vx = 0;
+          enemy.vy = 0;
+          this.shockwaves.push({ x: p.x, y: p.y, radius: 0, maxRadius: 20, life: 0, maxLife: 0.2, color: "#ffaa44" });
+          hit = true;
+          break;
+        }
+      }
+      if (hit) continue;
+      this.turretProjectiles[write] = p;
+      write++;
+    }
+    this.turretProjectiles.length = write;
+  }
+
+  refreshTurrets() {
+    // Place turrets on claimed cells adjacent to unclaimed cells (frontier)
+    this.turrets = [];
+    const maxTurrets = Math.min(8, 2 + Math.floor(this.state.claimedPercent * 10));
+    const frontier = [];
+    for (let row = 2; row < rows - 2; row += 3) {
+      for (let col = 2; col < cols - 2; col += 3) {
+        const idx = cellToIndex(col, row, cols);
+        if (!this.state.claimed[idx]) continue;
+        // Check if adjacent to unclaimed
+        const hasUnclaimed = !this.state.claimed[idx - 1] || !this.state.claimed[idx + 1] ||
+          !this.state.claimed[idx - cols] || !this.state.claimed[idx + cols];
+        if (hasUnclaimed) {
+          frontier.push({ col, row, idx });
+        }
+      }
+    }
+    // Pick random frontier cells
+    for (let i = frontier.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [frontier[i], frontier[j]] = [frontier[j], frontier[i]];
+    }
+    for (let i = 0; i < Math.min(maxTurrets, frontier.length); i++) {
+      const f = frontier[i];
+      this.turrets.push({
+        x: (f.col + 0.5) * config.cell,
+        y: (f.row + 0.5) * config.cell,
+        idx: f.idx,
+        cooldown: Math.random() * 1.5,
+      });
+    }
+  }
+
+  /** Update debris particles from explosions */
+  updateDebris(dt) {
+    let write = 0;
+    for (let i = 0; i < this.debrisParticles.length; i++) {
+      const p = this.debrisParticles[i];
+      p.life += dt;
+      if (p.life >= p.maxLife) continue;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 200 * dt; // gravity
+      p.vx *= 0.98;
+      p.angle += p.spin * dt;
+      // Bounce off world bounds
+      if (p.y > config.worldHeight) { p.y = config.worldHeight; p.vy *= -0.5; }
+      if (p.x < 0 || p.x > config.worldWidth) { p.vx *= -0.8; }
+      this.debrisParticles[write] = p;
+      write++;
+    }
+    this.debrisParticles.length = write;
+  }
+
+  /** Spawn debris from an enemy explosion */
+  spawnDebris(x, y, color) {
+    const count = 6 + Math.floor(Math.random() * 6);
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 80 + Math.random() * 200;
+      this.debrisParticles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 100,
+        angle: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 15,
+        life: 0,
+        maxLife: 1.0 + Math.random() * 1.0,
+        size: 2 + Math.random() * 4,
+        color: color || "#888888",
+      });
+    }
+  }
+
   updateDriftParticles(dt) {
     let write = 0;
     for (let i = 0; i < this.driftParticles.length; i++) {
@@ -2872,6 +3095,9 @@ export class Game {
       warpTunnels: this.warpTunnels,
       spawnerCells: this.spawnerCells,
       driftParticles: this.driftParticles,
+      debrisParticles: this.debrisParticles,
+      turrets: this.turrets,
+      turretProjectiles: this.turretProjectiles,
       fillWave: this.fillWave,
       undoAvailable: this.undoAvailable,
       skillEffect: this.skillEffect,
