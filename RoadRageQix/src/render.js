@@ -184,6 +184,57 @@ function drawTrail(ctx, state, config, elapsedSeconds, trailDanger, highContrast
       ctx.fillRect(col * cell, row * cell, cell, cell);
     }
     ctx.restore();
+
+    // Trail electrification: jagged lightning bolts along trail
+    if (trailCells.length > 2) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = `rgba(180, 220, 255, ${0.4 + Math.sin(elapsedSeconds * 20) * 0.3})`;
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = "rgba(100, 180, 255, 0.8)";
+      ctx.shadowBlur = 6;
+      // Draw jagged line connecting every few trail cells
+      const step = Math.max(1, Math.floor(trailCells.length / 20));
+      ctx.beginPath();
+      for (let i = 0; i < trailCells.length; i += step) {
+        const idx = trailCells[i];
+        const cx = (idx % cols + 0.5) * cell;
+        const cy = (Math.floor(idx / cols) + 0.5) * cell;
+        // Add electric jitter
+        const jx = cx + Math.sin(elapsedSeconds * 30 + i * 1.7) * 3;
+        const jy = cy + Math.cos(elapsedSeconds * 25 + i * 2.3) * 3;
+        if (i === 0) ctx.moveTo(jx, jy);
+        else ctx.lineTo(jx, jy);
+      }
+      ctx.stroke();
+
+      // Spark nodes at random trail cells
+      const sparkCount = Math.min(6, Math.floor(trailCells.length / 5));
+      for (let s = 0; s < sparkCount; s++) {
+        const phase = (elapsedSeconds * 8 + s * 2.7) % trailCells.length;
+        const si = Math.floor(phase) % trailCells.length;
+        const sidx = trailCells[si];
+        const sx = (sidx % cols + 0.5) * cell;
+        const sy = (Math.floor(sidx / cols) + 0.5) * cell;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2 + Math.sin(elapsedSeconds * 15 + s) * 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(200, 240, 255, 0.9)";
+        ctx.fill();
+        // Mini lightning forks
+        for (let f = 0; f < 2; f++) {
+          const fa = Math.random() * Math.PI * 2;
+          const fl = 4 + Math.random() * 8;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(sx + Math.cos(fa) * fl, sy + Math.sin(fa) * fl);
+          ctx.strokeStyle = "rgba(180, 230, 255, 0.7)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
   }
 }
 
@@ -1542,32 +1593,69 @@ function drawWarpTunnels(ctx, tunnels, elapsedSeconds) {
   }
 }
 
-/** Enemy spawner cells — glowing red zones */
+/** Enemy spawner cells — large pulsing danger zones with skull icon */
 function drawSpawnerCells(ctx, spawners, config, elapsedSeconds, claimed) {
   if (!spawners || spawners.length === 0) return;
   const cell = config.cell;
   for (const sc of spawners) {
-    if (claimed[sc.idx]) continue; // Disabled when claimed
+    if (claimed[sc.idx]) continue;
     if (sc.spawned >= sc.maxSpawns) continue;
     const x = (sc.col + 0.5) * cell;
     const y = (sc.row + 0.5) * cell;
-    const pulse = 1 + Math.sin(elapsedSeconds * 3 + sc.col) * 0.3;
-    const r = cell * 2 * pulse;
+    const pulse = 1 + Math.sin(elapsedSeconds * 3 + sc.col) * 0.4;
+    const r = cell * 4 * pulse;
+
+    // Outer danger glow
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, "rgba(255, 60, 40, 0.5)");
-    grad.addColorStop(0.6, "rgba(255, 30, 20, 0.2)");
+    grad.addColorStop(0, "rgba(255, 40, 20, 0.7)");
+    grad.addColorStop(0.4, "rgba(255, 30, 10, 0.35)");
+    grad.addColorStop(0.7, "rgba(200, 0, 0, 0.15)");
     grad.addColorStop(1, "rgba(255, 0, 0, 0)");
     ctx.fillStyle = grad;
     ctx.fill();
-    // Warning icon
-    ctx.fillStyle = "rgba(255, 100, 80, 0.7)";
-    ctx.font = 'bold 10px "Bahnschrift", sans-serif';
+
+    // Pulsing ring
+    ctx.beginPath();
+    ctx.arc(x, y, cell * 2.5 * pulse, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255, 80, 40, ${0.5 + Math.sin(elapsedSeconds * 5) * 0.3})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Rotating warning triangles
+    for (let i = 0; i < 3; i++) {
+      const a = elapsedSeconds * 2 + i * Math.PI * 2 / 3;
+      const px = x + Math.cos(a) * cell * 2;
+      const py = y + Math.sin(a) * cell * 2;
+      ctx.beginPath();
+      ctx.moveTo(px, py - 4);
+      ctx.lineTo(px - 3.5, py + 3);
+      ctx.lineTo(px + 3.5, py + 3);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255, 200, 60, 0.8)";
+      ctx.fill();
+    }
+
+    // Center skull/warning icon
+    ctx.fillStyle = `rgba(255, 220, 100, ${0.7 + Math.sin(elapsedSeconds * 4) * 0.3})`;
+    ctx.font = `bold ${Math.round(16 * pulse)}px "Impact", "Arial Black", sans-serif`;
     ctx.textAlign = "center";
-    ctx.fillText("!", x, y + 4);
+    ctx.textBaseline = "middle";
+    ctx.fillText("\u26A0", x, y);
     ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+
+    // Spawn progress indicator
+    if (sc.maxSpawns > 0) {
+      const remaining = sc.maxSpawns - sc.spawned;
+      ctx.fillStyle = "rgba(255, 150, 100, 0.6)";
+      ctx.font = '9px "Bahnschrift", sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillText(`${remaining} left`, x, y + cell * 2.8);
+      ctx.textAlign = "left";
+    }
     ctx.restore();
   }
 }
@@ -1614,6 +1702,94 @@ function drawFillWave(ctx, fillWave, config, elapsedSeconds) {
 }
 
 /** Combo indicator — shown when combo is active */
+/** Turrets — small diamond shapes on claimed frontier */
+function drawTurrets(ctx, turrets, elapsedSeconds) {
+  if (!turrets || turrets.length === 0) return;
+  ctx.save();
+  for (const t of turrets) {
+    const pulse = 1 + Math.sin(elapsedSeconds * 4 + t.x * 0.1) * 0.15;
+    const size = 5 * pulse;
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.rotate(elapsedSeconds * 1.5);
+    // Diamond shape
+    ctx.beginPath();
+    ctx.moveTo(0, -size);
+    ctx.lineTo(size, 0);
+    ctx.lineTo(0, size);
+    ctx.lineTo(-size, 0);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(255, 180, 60, 0.8)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 220, 120, 0.9)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Center dot
+    ctx.beginPath();
+    ctx.arc(0, 0, 2, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.restore();
+    // Range circle (faint)
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, 120, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255, 180, 60, 0.08)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Turret projectiles — bright orange bolts */
+function drawTurretProjectiles(ctx, projectiles) {
+  if (!projectiles || projectiles.length === 0) return;
+  ctx.save();
+  for (const p of projectiles) {
+    const t = p.life / p.maxLife;
+    const alpha = 1 - t;
+    const angle = Math.atan2(p.vy, p.vx);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(angle);
+    // Bolt trail
+    ctx.beginPath();
+    ctx.moveTo(-8, 0);
+    ctx.lineTo(4, 0);
+    ctx.strokeStyle = `rgba(255, 200, 80, ${alpha})`;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    // Bright head
+    ctx.beginPath();
+    ctx.arc(4, 0, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 240, 180, ${alpha})`;
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/** Explosion debris — metal shards bouncing */
+function drawDebrisParticles(ctx, debris) {
+  if (!debris || debris.length === 0) return;
+  ctx.save();
+  for (const p of debris) {
+    const t = p.life / p.maxLife;
+    const alpha = (1 - t) * 0.9;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.angle);
+    ctx.globalAlpha = alpha;
+    // Metal shard shape
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.size * 0.5, -p.size * 0.25, p.size, p.size * 0.5);
+    // Highlight edge
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.3 * alpha})`;
+    ctx.fillRect(-p.size * 0.5, -p.size * 0.25, p.size * 0.3, p.size * 0.2);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function drawComboIndicator(ctx, canvasWidth, comboLevel, comboTimer) {
   if (comboLevel <= 0) return;
   const x = canvasWidth - 140;
@@ -1720,8 +1896,17 @@ export function renderWorld(ctx, game) {
   // Drift smoke particles
   drawDriftParticles(ctx, game.driftParticles);
 
+  // Explosion debris
+  drawDebrisParticles(ctx, game.debrisParticles);
+
   // Territory fill wave animation
   drawFillWave(ctx, game.fillWave, config, elapsedSeconds);
+
+  // Turrets on claimed frontier
+  drawTurrets(ctx, game.turrets, elapsedSeconds);
+
+  // Turret projectiles
+  drawTurretProjectiles(ctx, game.turretProjectiles);
 
   const enemies = state.enemies ?? (state.enemy ? [state.enemy] : []);
   const shrinkScale = game.shrinkActive ? 0.5 : 1;
