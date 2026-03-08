@@ -16,6 +16,7 @@
         </div>
         <div class="touch-buttons">
           <button id="touch-restart" type="button" class="touch-btn">Ignition</button>
+          <button id="touch-bomb" type="button" class="touch-btn">Bomb</button>
           <button id="touch-fullscreen" type="button" class="touch-btn">Fullscreen</button>
         </div>
       </section>
@@ -37,6 +38,7 @@
           <div class="menu-secondary-buttons">
             <button id="instructions-btn" type="button" class="menu-link-btn">Instructions</button>
             <button id="settings-btn" type="button" class="menu-link-btn">Settings</button>
+            <button id="skills-btn" type="button" class="menu-link-btn">Skill Tree</button>
           </div>
         </div>
         <div id="instructions-panel" class="collapsible-panel hidden">
@@ -51,9 +53,14 @@
             <li>Press P or Esc to pause/resume during gameplay</li>
             <li>Press H to toggle high-contrast mode (colorblind friendly)</li>
             <li>Press F for fullscreen, Esc to exit fullscreen</li>
-            <li>Collect power-ups: Shield, Speed, Slow (enemies), Extra Life, Score x2, Bomb, Magnet, Lightning (zap enemy), Trail Close, Freeze, Shrink</li>
-            <li>Build claim streaks for bonus points! Consecutive claims without damage earn multiplied rewards</li>
+            <li>Bombs: Collect bomb pickups to add to inventory. Press B (or tap Bomb) to deploy. Kills are permanent!</li>
+            <li>Collect power-ups: Shield, Speed, Slow, Extra Life, Score x2, Bomb, Magnet, Lightning, Trail Close, Freeze, Shrink</li>
+            <li>Build claim combos! Quick successive claims escalate your score multiplier (x1.5, x2, x2.5...)</li>
+            <li>Warp tunnels on borders teleport you to the opposite side</li>
+            <li>Watch out for enemy spawner cells (red glow) — claim over them to shut them down!</li>
+            <li>One undo per life — get rewound instead of dying on first hit</li>
             <li>Claim bonus zones (★) for big point bonuses!</li>
+            <li>Unlock skills and cars with cumulative score in the Skill Tree menu!</li>
             <li>Close trails quickly — your fuse burns if you take too long!</li>
             <li>Near-miss dodges earn bonus points and trigger slow-mo!</li>
             <li>Each level has a unique theme — survive to see them all!</li>
@@ -70,6 +77,12 @@
               <input id="shake-toggle" type="checkbox" checked class="settings-checkbox" />
               Screen Shake
             </label>
+          </div>
+        </div>
+        <div id="skills-panel" class="collapsible-panel hidden">
+          <div class="settings-group" id="skill-tree-container">
+            <p style="color:#f0cf9f;font-size:0.85rem;margin:0;">Spend cumulative score on permanent upgrades. <span id="skill-points-display" style="color:#ffdd88;"></span></p>
+            <div id="skill-list" style="display:grid;gap:6px;margin-top:6px;"></div>
           </div>
         </div>
         <span id="version-label" class="version-label"></span>

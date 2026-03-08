@@ -1,4 +1,4 @@
-import { Game, GAME_VERSION } from "./game.js";
+import { Game, GAME_VERSION, SKILL_TREE, CAR_SKINS } from "./game.js";
 import { InputController } from "./input.js";
 import { ensureAudioResumed } from "./audio.js";
 
@@ -20,6 +20,11 @@ const shakeToggle = document.getElementById("shake-toggle");
 const versionLabel = document.getElementById("version-label");
 const resumeButton = document.getElementById("resume-btn");
 const continueButton = document.getElementById("continue-btn");
+const skillsBtn = document.getElementById("skills-btn");
+const skillsPanel = document.getElementById("skills-panel");
+const skillList = document.getElementById("skill-list");
+const skillPointsDisplay = document.getElementById("skill-points-display");
+const touchBombButton = document.getElementById("touch-bomb");
 
 const input = new InputController(window);
 const game = new Game(canvas, menuOverlay);
@@ -43,13 +48,13 @@ resumeButton?.addEventListener("click", () => {
 // Instructions toggle
 instructionsBtn?.addEventListener("click", () => {
   const hidden = instructionsPanel.classList.toggle("hidden");
-  if (!hidden) settingsPanel?.classList.add("hidden");
+  if (!hidden) { settingsPanel?.classList.add("hidden"); skillsPanel?.classList.add("hidden"); }
 });
 
 // Settings toggle
 settingsBtn?.addEventListener("click", () => {
   const hidden = settingsPanel.classList.toggle("hidden");
-  if (!hidden) instructionsPanel?.classList.add("hidden");
+  if (!hidden) { instructionsPanel?.classList.add("hidden"); skillsPanel?.classList.add("hidden"); }
 });
 
 // Settings controls
@@ -65,6 +70,61 @@ if (shakeToggle) {
     game.setShakeEnabled(shakeToggle.checked);
   });
 }
+
+// Skill tree panel
+skillsBtn?.addEventListener("click", () => {
+  const hidden = skillsPanel.classList.toggle("hidden");
+  if (!hidden) {
+    instructionsPanel?.classList.add("hidden");
+    settingsPanel?.classList.add("hidden");
+    renderSkillTree();
+  }
+});
+
+function renderSkillTree() {
+  if (!skillList || !skillPointsDisplay) return;
+  skillPointsDisplay.textContent = `Available: ${game.cumulativeScore} pts`;
+  skillList.innerHTML = "";
+  for (const skill of SKILL_TREE) {
+    const owned = game.unlockedSkills.includes(skill.id);
+    const canAfford = game.cumulativeScore >= skill.cost;
+    const prereqMet = !skill.requires || game.unlockedSkills.includes(skill.requires);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.style.cssText = `
+      display:flex;justify-content:space-between;align-items:center;padding:6px 10px;
+      border:1px solid ${owned ? "rgba(100,255,100,0.5)" : prereqMet && canAfford ? "rgba(255,191,122,0.6)" : "rgba(255,177,91,0.2)"};
+      background:${owned ? "rgba(40,80,40,0.5)" : "rgba(25,20,15,0.6)"};
+      color:${owned ? "#88ff88" : canAfford && prereqMet ? "#ffd9ac" : "rgba(200,180,160,0.5)"};
+      font-family:"Bahnschrift","Segoe UI",sans-serif;font-size:0.8rem;cursor:${owned ? "default" : "pointer"};
+      width:100%;
+    `;
+    btn.innerHTML = `<span><strong>${skill.name}</strong> — ${skill.desc}</span><span>${owned ? "OWNED" : skill.cost + " pts"}</span>`;
+    if (!owned && canAfford && prereqMet) {
+      btn.addEventListener("click", () => {
+        if (game.buySkill(skill.id)) {
+          renderSkillTree();
+        }
+      });
+    }
+    skillList.appendChild(btn);
+  }
+}
+
+// Touch bomb button
+touchBombButton?.addEventListener("pointerdown", (event) => {
+  ensureAudioResumed();
+  if (game.state.mode === "playing") {
+    input.pressVirtual("KeyB");
+  }
+  event.preventDefault();
+});
+touchBombButton?.addEventListener("pointerup", () => {
+  input.releaseVirtual("KeyB");
+});
+touchBombButton?.addEventListener("pointercancel", () => {
+  input.releaseVirtual("KeyB");
+});
 
 let running = true;
 let lastTs = performance.now();

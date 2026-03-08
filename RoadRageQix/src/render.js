@@ -1322,7 +1322,7 @@ function drawEnemyExplosions(ctx, explosions, canvasWidth, canvasHeight, worldOf
   ctx.restore();
 }
 
-function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore, theme, streakCount) {
+function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore, theme, streakCount, game) {
   const percent = Math.round(state.claimedPercent * 100);
   const nitro = state.nitro ?? { activeSeconds: 0, cooldownSeconds: 0 };
   const nitroReady = nitro.activeSeconds <= 0 && nitro.cooldownSeconds <= 0;
@@ -1352,7 +1352,9 @@ function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore, t
   ctx.fillText(`Territory: ${percent}% / 75%`, padX, hudY + Math.round(32 * s));
   ctx.fillText(`Lives: ${state.lives}`, padX, hudY + Math.round(60 * s));
   ctx.font = `600 ${Math.round(16 * s)}px "Bahnschrift", "Segoe UI", sans-serif`;
-  ctx.fillText(`Level: ${level}  Enemies: ${enemyCount}`, padX, hudY + Math.round(81 * s));
+  const bombCount = game?.bombInventory ?? 0;
+  const undoStr = game?.undoAvailable ? " | Undo:1" : "";
+  ctx.fillText(`Level: ${level}  Enemies: ${enemyCount}  Bombs: ${bombCount}${undoStr}`, padX, hudY + Math.round(81 * s));
 
   // Score
   ctx.fillStyle = "#ffd28f";
@@ -1491,6 +1493,153 @@ function drawEndMessage(ctx, canvasWidth, canvasHeight, didWin, restartPrompt, s
   ctx.textAlign = "left";
 }
 
+/** Warp tunnel portals — pulsing circles on borders */
+function drawWarpTunnels(ctx, tunnels, elapsedSeconds) {
+  if (!tunnels || tunnels.length === 0) return;
+  for (const warp of tunnels) {
+    const pulse = 1 + Math.sin(elapsedSeconds * 4) * 0.3;
+    const r = 12 * pulse;
+    for (const [x, y] of [[warp.ax, warp.ay], [warp.bx, warp.by]]) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, "rgba(100, 200, 255, 0.9)");
+      grad.addColorStop(0.5, "rgba(50, 120, 255, 0.5)");
+      grad.addColorStop(1, "rgba(50, 120, 255, 0)");
+      ctx.fillStyle = grad;
+      ctx.fill();
+      // Inner glow ring
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.6, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(180, 230, 255, 0.8)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Spinning particles
+      for (let i = 0; i < 4; i++) {
+        const a = elapsedSeconds * 3 + i * Math.PI * 0.5;
+        const px = x + Math.cos(a) * r * 0.8;
+        const py = y + Math.sin(a) * r * 0.8;
+        ctx.beginPath();
+        ctx.arc(px, py, 2, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(200, 240, 255, 0.9)";
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    // Connecting line (faint)
+    ctx.save();
+    ctx.globalAlpha = 0.15 + Math.sin(elapsedSeconds * 2) * 0.05;
+    ctx.strokeStyle = "#4488ff";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 8]);
+    ctx.beginPath();
+    ctx.moveTo(warp.ax, warp.ay);
+    ctx.lineTo(warp.bx, warp.by);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+}
+
+/** Enemy spawner cells — glowing red zones */
+function drawSpawnerCells(ctx, spawners, config, elapsedSeconds, claimed) {
+  if (!spawners || spawners.length === 0) return;
+  const cell = config.cell;
+  for (const sc of spawners) {
+    if (claimed[sc.idx]) continue; // Disabled when claimed
+    if (sc.spawned >= sc.maxSpawns) continue;
+    const x = (sc.col + 0.5) * cell;
+    const y = (sc.row + 0.5) * cell;
+    const pulse = 1 + Math.sin(elapsedSeconds * 3 + sc.col) * 0.3;
+    const r = cell * 2 * pulse;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, "rgba(255, 60, 40, 0.5)");
+    grad.addColorStop(0.6, "rgba(255, 30, 20, 0.2)");
+    grad.addColorStop(1, "rgba(255, 0, 0, 0)");
+    ctx.fillStyle = grad;
+    ctx.fill();
+    // Warning icon
+    ctx.fillStyle = "rgba(255, 100, 80, 0.7)";
+    ctx.font = 'bold 10px "Bahnschrift", sans-serif';
+    ctx.textAlign = "center";
+    ctx.fillText("!", x, y + 4);
+    ctx.textAlign = "left";
+    ctx.restore();
+  }
+}
+
+/** Drift smoke particles */
+function drawDriftParticles(ctx, particles) {
+  if (!particles || particles.length === 0) return;
+  ctx.save();
+  for (const p of particles) {
+    const t = p.life / p.maxLife;
+    const alpha = (1 - t) * 0.5;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = `rgba(180, 170, 160, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (1 + t * 0.5), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Territory fill wave animation — paint pour effect */
+function drawFillWave(ctx, fillWave, config, elapsedSeconds) {
+  if (!fillWave || fillWave.cells.length === 0) return;
+  const cell = config.cell;
+  const cols = Math.floor(config.worldWidth / cell);
+  const progress = fillWave.progress;
+  const visibleCount = Math.floor(fillWave.cells.length * Math.min(1, progress));
+  ctx.save();
+  for (let i = 0; i < visibleCount; i++) {
+    const idx = fillWave.cells[i];
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const x = col * cell;
+    const y = row * cell;
+    const cellProgress = Math.min(1, (progress * fillWave.cells.length - i) / 3);
+    const scale = cellProgress;
+    ctx.globalAlpha = 0.4 * cellProgress;
+    ctx.fillStyle = `hsl(${40 + i * 0.3}, 80%, ${60 + cellProgress * 20}%)`;
+    const cx = x + cell * 0.5;
+    const cy = y + cell * 0.5;
+    ctx.fillRect(cx - cell * 0.5 * scale, cy - cell * 0.5 * scale, cell * scale, cell * scale);
+  }
+  ctx.restore();
+}
+
+/** Combo indicator — shown when combo is active */
+function drawComboIndicator(ctx, canvasWidth, comboLevel, comboTimer) {
+  if (comboLevel <= 0) return;
+  const x = canvasWidth - 140;
+  const y = 50;
+  ctx.save();
+  const pulse = 1 + Math.sin(Date.now() * 0.008) * 0.1;
+  ctx.font = `bold ${Math.round(22 * pulse)}px "Impact", "Arial Black", sans-serif`;
+  ctx.textAlign = "center";
+  const hue = Math.min(comboLevel * 30, 200);
+  ctx.fillStyle = `hsl(${60 - hue}, 100%, ${60 + comboLevel * 3}%)`;
+  ctx.fillText(`COMBO x${(1 + comboLevel * 0.5).toFixed(1)}`, x, y);
+  // Timer bar
+  const barW = 80;
+  const barH = 4;
+  const barX = x - barW / 2;
+  const barY = y + 6;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+  ctx.fillRect(barX, barY, barW, barH);
+  const maxTime = 4;
+  const fill = Math.min(1, comboTimer / maxTime);
+  ctx.fillStyle = `hsl(${60 - hue}, 100%, 55%)`;
+  ctx.fillRect(barX, barY, barW * fill, barH);
+  ctx.textAlign = "left";
+  ctx.restore();
+}
+
 export function renderWorld(ctx, game) {
   const {
     canvasWidth,
@@ -1547,6 +1696,12 @@ export function renderWorld(ctx, game) {
   // Bonus zones (draw before trail so trail overlays them)
   drawBonusZones(ctx, game.bonusZones, config, elapsedSeconds);
 
+  // Warp tunnels
+  drawWarpTunnels(ctx, game.warpTunnels, elapsedSeconds);
+
+  // Enemy spawner cells
+  drawSpawnerCells(ctx, game.spawnerCells, config, elapsedSeconds, state.claimed);
+
   drawTrail(ctx, state, config, elapsedSeconds, trailDanger || 0, highContrastMode);
   drawClaimFlash(ctx, claimFlashCells, claimFlashTime, config);
 
@@ -1561,6 +1716,12 @@ export function renderWorld(ctx, game) {
 
   // Claim particles
   drawClaimParticles(ctx, claimParticles);
+
+  // Drift smoke particles
+  drawDriftParticles(ctx, game.driftParticles);
+
+  // Territory fill wave animation
+  drawFillWave(ctx, game.fillWave, config, elapsedSeconds);
 
   const enemies = state.enemies ?? (state.enemy ? [state.enemy] : []);
   const shrinkScale = game.shrinkActive ? 0.5 : 1;
@@ -1681,11 +1842,14 @@ export function renderOverlay(ctx, game) {
   } = game;
   const restartPrompt = touchMode ? "Tap Ignition to restart" : "Press Space to restart";
 
-  drawHud(ctx, state, canvasWidth, config, touchMode, score || 0, highScore || 0, theme, streakCount || 0);
+  drawHud(ctx, state, canvasWidth, config, touchMode, score || 0, highScore || 0, theme, streakCount || 0, game);
   drawMinimap(ctx, state, config, canvasWidth);
 
   // Streak indicator
   drawStreakIndicator(ctx, canvasWidth, streakCount || 0, streakFlash || 0);
+
+  // Combo indicator
+  drawComboIndicator(ctx, canvasWidth, game.comboLevel || 0, game.comboTimer || 0);
 
   // Tutorial overlay
   if (!tutorialShown && state.mode === "playing") {
