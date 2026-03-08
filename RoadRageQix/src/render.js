@@ -1599,7 +1599,6 @@ function drawSpawnerCells(ctx, spawners, config, elapsedSeconds, claimed) {
   const cell = config.cell;
   for (const sc of spawners) {
     if (claimed[sc.idx]) continue;
-    if (sc.spawned >= sc.maxSpawns) continue;
     const x = (sc.col + 0.5) * cell;
     const y = (sc.row + 0.5) * cell;
     const pulse = 1 + Math.sin(elapsedSeconds * 3 + sc.col) * 0.4;
@@ -1647,15 +1646,13 @@ function drawSpawnerCells(ctx, spawners, config, elapsedSeconds, claimed) {
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
 
-    // Spawn progress indicator
-    if (sc.maxSpawns > 0) {
-      const remaining = sc.maxSpawns - sc.spawned;
-      ctx.fillStyle = "rgba(255, 150, 100, 0.6)";
-      ctx.font = '9px "Bahnschrift", sans-serif';
-      ctx.textAlign = "center";
-      ctx.fillText(`${remaining} left`, x, y + cell * 2.8);
-      ctx.textAlign = "left";
-    }
+    // Spawn status indicator
+    const active = sc.spawnedEnemy && !sc.spawnedEnemy.dead;
+    ctx.fillStyle = active ? "rgba(100, 255, 100, 0.6)" : "rgba(255, 150, 100, 0.6)";
+    ctx.font = '9px "Bahnschrift", sans-serif';
+    ctx.textAlign = "center";
+    ctx.fillText(active ? "active" : "ready", x, y + cell * 2.8);
+    ctx.textAlign = "left";
     ctx.restore();
   }
 }

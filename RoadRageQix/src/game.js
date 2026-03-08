@@ -5,7 +5,7 @@ import { createPowerup, createActivePowerupEffect, POWERUP_TYPES } from "./power
 import { getThemeForLevel } from "./themes.js";
 import * as audio from "./audio.js";
 
-export const GAME_VERSION = "1.1.0";
+export const GAME_VERSION = "1.1.1";
 
 const AUTOSAVE_KEY = "roadrageqix_autosave";
 const AUTOSAVE_INTERVAL = 5; // seconds between auto-saves
@@ -193,7 +193,7 @@ function getEnemyOpenStartIndex(claimed, enemy) {
   return startIdx;
 }
 
-function floodFromEnemies(claimed, enemies, spawnerCells) {
+function floodFromEnemies(claimed, enemies) {
   floodBuffer.fill(0);
   const queue = [];
 
@@ -205,18 +205,6 @@ function floodFromEnemies(claimed, enemies, spawnerCells) {
     }
     floodBuffer[startIdx] = 1;
     queue.push(startIdx);
-  }
-
-  // Also flood from active spawner cells
-  if (spawnerCells) {
-    for (const sc of spawnerCells) {
-      if (claimed[sc.idx]) continue;
-      if (sc.spawned >= sc.maxSpawns) continue;
-      if (!floodBuffer[sc.idx]) {
-        floodBuffer[sc.idx] = 1;
-        queue.push(sc.idx);
-      }
-    }
   }
 
   let head = 0;
@@ -1419,7 +1407,7 @@ export class Game {
     }
     this.state.trailCells.length = 0;
 
-    const reachable = floodFromEnemies(this.state.claimed, this.state.enemies, this.spawnerCells);
+    const reachable = floodFromEnemies(this.state.claimed, this.state.enemies);
     forEachInterior(cols, rows, (col, row) => {
       const idx = cellToIndex(col, row, cols);
       if (!this.state.claimed[idx] && !reachable[idx]) {
@@ -2552,7 +2540,7 @@ export class Game {
   /** After bomb: claim all unclaimed areas not reachable from live enemies or active spawners */
   postBombClaim() {
     const prevPercent = this.state.claimedPercent;
-    const reachable = floodFromEnemies(this.state.claimed, this.state.enemies, this.spawnerCells);
+    const reachable = floodFromEnemies(this.state.claimed, this.state.enemies);
     const newClaimed = [];
     forEachInterior(cols, rows, (col, row) => {
       const idx = cellToIndex(col, row, cols);
@@ -2639,8 +2627,7 @@ export class Game {
             col, row, idx,
             spawnTimer: 8 + Math.random() * 4,
             maxSpawnTimer: 8 + Math.random() * 4,
-            spawned: 0,
-            maxSpawns: 2 + Math.floor(this.currentLevel / 3),
+            spawnedEnemy: null, // reference to the enemy spawned by this cell
           });
           break;
         }
@@ -2653,14 +2640,14 @@ export class Game {
     for (const sc of this.spawnerCells) {
       // If the spawner cell has been claimed, disable it
       if (this.state.claimed[sc.idx]) continue;
-      if (sc.spawned >= sc.maxSpawns) continue;
+      // Only spawn if no living enemy from this spawner
+      if (sc.spawnedEnemy && !sc.spawnedEnemy.dead) continue;
       sc.spawnTimer -= dt;
       if (sc.spawnTimer <= 0) {
         sc.spawnTimer = sc.maxSpawnTimer;
-        sc.spawned += 1;
         const x = (sc.col + 0.5) * config.cell;
         const y = (sc.row + 0.5) * config.cell;
-        const variant = pickEnemyVariant(this.currentLevel, sc.spawned);
+        const variant = pickEnemyVariant(this.currentLevel, 0);
         const def = ENEMY_VARIANTS[variant];
         const enemy = createEnemy(x, y);
         enemy.variant = variant;
@@ -2676,6 +2663,7 @@ export class Game {
           enemy.charging = false;
           enemy.chargeTimeLeft = 0;
         }
+        sc.spawnedEnemy = enemy;
         this.state.enemies.push(enemy);
         this.state.enemyCount = this.state.enemies.length;
         // Shockwave at spawn point
