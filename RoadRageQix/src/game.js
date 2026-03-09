@@ -1279,11 +1279,10 @@ export class Game {
       }
       if (currentIsClaimed && (axis.x !== 0 || axis.y !== 0)) {
         player.trailActive = true;
-        // Record the starting claimed cell so trail connects to the border
-        this.recordTrailCell(curIdx);
+        // Record the starting claimed cell and interpolate to first unclaimed cell
+        this.recordTrailLine(curIdx, idx);
         player.x = nextX;
         player.y = nextY;
-        this.recordTrailCell(idx);
         return;
       }
       // If player is on unclaimed territory (e.g., after bomb), allow free movement
@@ -1291,18 +1290,20 @@ export class Game {
         player.trailActive = true;
         player.x = nextX;
         player.y = nextY;
-        this.recordTrailCell(idx);
+        this.recordTrailLine(curIdx, idx);
         return;
       }
       return;
     }
 
+    // Interpolate trail cells from previous position to next position
+    const prevTrailIdx = cellToIndex(curCol, curRow, cols);
     player.x = nextX;
     player.y = nextY;
 
     if (isClaimed) {
-      // Record the ending claimed cell so trail connects to the border
-      this.recordTrailCell(idx);
+      // Record all cells up to and including the ending claimed cell
+      this.recordTrailLine(prevTrailIdx, idx);
       player.trailActive = false;
       this.closeTrailAndClaim();
       return;
@@ -1311,7 +1312,8 @@ export class Game {
     if (this.state.trailMask[idx]) {
       const last = this.state.trailCells[this.state.trailCells.length - 1];
       if (last !== idx) {
-        // Hit own trail — close and claim instead of dying
+        // Fill gap to the self-intersection point, then close
+        this.recordTrailLine(prevTrailIdx, idx);
         this.connectTrailToWall();
         player.trailActive = false;
         this.closeTrailAndClaim();
@@ -1319,7 +1321,7 @@ export class Game {
       return;
     }
 
-    this.recordTrailCell(idx);
+    this.recordTrailLine(prevTrailIdx, idx);
 
     if (oldX === player.x && oldY === player.y && (axis.x !== 0 || axis.y !== 0)) {
       // Stuck while trailing — close and claim instead of dying
@@ -1393,6 +1395,26 @@ export class Game {
     if (this.state.trailMask[idx]) return; // avoid duplicates
     this.state.trailMask[idx] = 1;
     this.state.trailCells.push(idx);
+  }
+
+  /** Record all cells along a line between two cells (Bresenham) to fill gaps */
+  recordTrailLine(fromIdx, toIdx) {
+    let x0 = fromIdx % cols;
+    let y0 = Math.floor(fromIdx / cols);
+    const x1 = toIdx % cols;
+    const y1 = Math.floor(toIdx / cols);
+    const dx = Math.abs(x1 - x0);
+    const dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    for (;;) {
+      this.recordTrailCell(cellToIndex(x0, y0, cols));
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
   }
 
   /** Connect the end of an open trail back to the nearest claimed cell */
