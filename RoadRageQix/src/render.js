@@ -762,7 +762,7 @@ function drawEnemyWarningIndicators(ctx, enemies, player, worldWidth, worldHeigh
   ctx.restore();
 }
 
-function drawLevelTransition(ctx, canvasWidth, canvasHeight, transitionTime, duration, level, themeName) {
+function drawLevelTransition(ctx, canvasWidth, canvasHeight, transitionTime, duration, level, themeName, modifier) {
   if (transitionTime <= 0) return;
   const progress = 1 - transitionTime / duration;
 
@@ -788,7 +788,7 @@ function drawLevelTransition(ctx, canvasWidth, canvasHeight, transitionTime, dur
     ctx.save();
     ctx.globalAlpha = bannerAlpha * 0.85;
     ctx.fillStyle = "rgba(8, 7, 6, 0.7)";
-    const bannerH = 90;
+    const bannerH = modifier?.name ? 110 : 90;
     const bannerY = canvasHeight / 2 - bannerH / 2;
     ctx.fillRect(0, bannerY, canvasWidth, bannerH);
 
@@ -799,6 +799,11 @@ function drawLevelTransition(ctx, canvasWidth, canvasHeight, transitionTime, dur
     ctx.fillStyle = "#f4dcc1";
     ctx.font = '500 18px "Bahnschrift", "Segoe UI", sans-serif';
     ctx.fillText(themeName || "Wasteland", canvasWidth / 2, canvasHeight / 2 + 26);
+    if (modifier?.name) {
+      ctx.fillStyle = "rgba(255, 200, 140, 0.7)";
+      ctx.font = '500 13px "Bahnschrift", "Segoe UI", sans-serif';
+      ctx.fillText(`${modifier.name}: ${modifier.desc}`, canvasWidth / 2, canvasHeight / 2 + 44);
+    }
     ctx.textAlign = "left";
     ctx.restore();
   }
@@ -1200,8 +1205,40 @@ function drawBossHPBar(ctx, enemy) {
   ctx.fillStyle = "#fff";
   ctx.font = '700 9px "Impact", sans-serif';
   ctx.textAlign = "center";
-  ctx.fillText("BOSS", enemy.x, y - 3);
+  const bossLabel = enemy.bossType === "splitter" ? "SPLITTER"
+    : enemy.bossType === "splitter_mini" ? "MINI-BOSS"
+    : enemy.bossType === "sentinel" ? "SENTINEL"
+    : "WARLORD";
+  ctx.fillText(bossLabel, enemy.x, y - 3);
   ctx.textAlign = "left";
+  ctx.restore();
+}
+
+function drawSentinelShield(ctx, enemy, elapsedSeconds) {
+  const orbCount = 6;
+  const orbitRadius = enemy.radius + 20;
+  const angle = enemy.shieldAngle || elapsedSeconds * 2;
+  ctx.save();
+  for (let i = 0; i < orbCount; i++) {
+    const a = angle + (i / orbCount) * Math.PI * 2;
+    const ox = enemy.x + Math.cos(a) * orbitRadius;
+    const oy = enemy.y + Math.sin(a) * orbitRadius;
+    const pulse = 0.7 + Math.sin(elapsedSeconds * 4 + i) * 0.3;
+    ctx.globalAlpha = 0.6 * pulse;
+    const grad = ctx.createRadialGradient(ox, oy, 0, ox, oy, 6);
+    grad.addColorStop(0, "rgba(200, 160, 255, 0.9)");
+    grad.addColorStop(1, "rgba(130, 80, 220, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(ox, oy, 6, 0, Math.PI * 2);
+    ctx.fill();
+    // Solid core
+    ctx.globalAlpha = 0.8 * pulse;
+    ctx.fillStyle = "#cc99ff";
+    ctx.beginPath();
+    ctx.arc(ox, oy, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -1462,6 +1499,20 @@ function drawHud(ctx, state, canvasWidth, config, touchMode, score, highScore, t
   ctx.fillStyle = "rgba(245, 212, 165, 0.7)";
   ctx.font = `500 ${Math.round(14 * s)}px "Bahnschrift", "Segoe UI", sans-serif`;
   ctx.fillText(`${theme?.name || "Wasteland"} Sector`, canvasWidth - Math.round(170 * s), Math.round(32 * s));
+
+  // Modifier indicator
+  if (theme?.modifier?.name) {
+    ctx.fillStyle = "rgba(255, 200, 140, 0.55)";
+    ctx.font = `500 ${Math.round(11 * s)}px "Bahnschrift", "Segoe UI", sans-serif`;
+    let modText = theme.modifier.name;
+    // Poison timer warning
+    if (theme.modifier.type === "poisonZone" && game?.poisonTimer > 0) {
+      const remaining = Math.max(0, theme.modifier.poisonDuration - game.poisonTimer);
+      modText += ` (${remaining.toFixed(1)}s)`;
+      if (remaining < 3) ctx.fillStyle = "rgba(255, 80, 80, 0.8)";
+    }
+    ctx.fillText(modText, canvasWidth - Math.round(170 * s), Math.round(48 * s));
+  }
 }
 
 function drawDamageFlash(ctx, canvasWidth, canvasHeight, flashTime) {
@@ -1907,8 +1958,28 @@ export function renderWorld(ctx, game) {
 
   const enemies = state.enemies ?? (state.enemy ? [state.enemy] : []);
   const shrinkScale = game.shrinkActive ? 0.5 : 1;
+  const stealthMod = theme?.modifier?.type === "stealth" ? theme.modifier : null;
   for (const enemy of enemies) {
     if (enemy.dead) continue; // Don't render dead enemies
+    // Stealth modifier: fade enemies by distance to player
+    let stealthAlpha = 1;
+    if (stealthMod && state.mode === "playing") {
+      const dx = enemy.x - state.player.x;
+      const dy = enemy.y - state.player.y;
+      const dist = Math.hypot(dx, dy);
+      const revealDist = stealthMod.revealDist || 120;
+      const halfReveal = revealDist * 0.5;
+      if (dist > revealDist) {
+        stealthAlpha = 0;
+      } else if (dist > halfReveal) {
+        stealthAlpha = 1 - (dist - halfReveal) / (revealDist - halfReveal);
+      }
+      // Bosses always have minimum visibility
+      if (enemy.variant === "boss") stealthAlpha = Math.max(0.3, stealthAlpha);
+    }
+    if (stealthAlpha <= 0.01) continue;
+    const needAlpha = stealthAlpha < 0.99;
+    if (needAlpha) { ctx.save(); ctx.globalAlpha = stealthAlpha; }
     if (shrinkScale < 1) {
       ctx.save();
       ctx.translate(enemy.x, enemy.y);
@@ -1920,6 +1991,11 @@ export function renderWorld(ctx, game) {
     if (shrinkScale < 1) {
       ctx.restore();
     }
+    // Sentinel shield orbs
+    if (enemy.variant === "boss" && (enemy.bossType === "sentinel") && !enemy.dead) {
+      drawSentinelShield(ctx, enemy, elapsedSeconds);
+    }
+    if (needAlpha) { ctx.restore(); }
   }
 
   // Shockwave rings
@@ -1987,6 +2063,22 @@ export function renderWorld(ctx, game) {
       }
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  // Dust Storm fog of war overlay
+  if (theme?.modifier?.type === "dustStorm" && state.mode === "playing") {
+    const fogRadius = theme.modifier.fogRadius || 150;
+    ctx.save();
+    const fogGrad = ctx.createRadialGradient(
+      state.player.x, state.player.y, fogRadius * 0.3,
+      state.player.x, state.player.y, fogRadius
+    );
+    fogGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+    fogGrad.addColorStop(0.6, "rgba(0, 0, 0, 0.4)");
+    fogGrad.addColorStop(1, "rgba(0, 0, 0, 0.85)");
+    ctx.fillStyle = fogGrad;
+    ctx.fillRect(0, 0, worldWidth, worldHeight);
     ctx.restore();
   }
 
@@ -2098,7 +2190,7 @@ export function renderOverlay(ctx, game) {
 
   // Level transition animation
   if (levelTransitionTime > 0) {
-    drawLevelTransition(ctx, canvasWidth, canvasHeight, levelTransitionTime, levelTransitionDuration || 1.8, levelTransitionLevel || 1, theme?.name);
+    drawLevelTransition(ctx, canvasWidth, canvasHeight, levelTransitionTime, levelTransitionDuration || 1.8, levelTransitionLevel || 1, theme?.name, theme?.modifier);
   }
 
   // CRT filter (always last)

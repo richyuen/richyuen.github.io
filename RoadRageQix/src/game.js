@@ -59,6 +59,17 @@ const ENEMY_VARIANTS = {
   boss: { radiusMul: 2.2, speedMul: 0.55, spikeCount: 24, color: "#ffaa00" },
 };
 
+/** Boss type variants — cycle every 3 boss levels */
+const BOSS_TYPES = [
+  { type: "warlord",  radiusMul: 2.2, speedMul: 0.55, spikeCount: 24, color: "#ffaa00" },
+  { type: "splitter", radiusMul: 1.5, speedMul: 0.70, spikeCount: 18, color: "#44ff88" },
+  { type: "sentinel", radiusMul: 2.8, speedMul: 0,    spikeCount: 20, color: "#aa44ff" },
+];
+
+function getBossTypeForLevel(level) {
+  return BOSS_TYPES[((level / 4) - 1) % BOSS_TYPES.length];
+}
+
 function pickEnemyVariant(level, index) {
   if (level < 3) return "normal";
   if (level < 5) {
@@ -107,20 +118,33 @@ function buildEnemyWave(count, level) {
 
   // Boss levels: add a boss enemy
   if (isBossLevel) {
-    const bDef = ENEMY_VARIANTS.boss;
+    const bType = getBossTypeForLevel(level);
     const boss = createEnemy(centerX, centerY);
     boss.variant = "boss";
-    boss.radius = Math.round(boss.radius * bDef.radiusMul);
-    boss.spikeCount = bDef.spikeCount;
-    boss.variantColor = bDef.color;
+    boss.bossType = bType.type;
+    boss.radius = Math.round(boss.radius * bType.radiusMul);
+    boss.spikeCount = bType.spikeCount;
+    boss.variantColor = bType.color;
     boss.bossHP = 3 + Math.floor(level / 4); // 4HP at level 4, 5HP at level 8, etc.
     boss.bossMaxHP = boss.bossHP;
     boss.bossPhase = 0; // 0=roam, 1=charge, 2=spin
     boss.bossPhaseTimer = 3 + Math.random() * 2;
-    const spd = Math.hypot(boss.vx, boss.vy) * bDef.speedMul;
+    const spd = Math.hypot(boss.vx, boss.vy) * bType.speedMul;
     const ba = Math.atan2(boss.vy, boss.vx);
     boss.vx = Math.cos(ba) * spd;
     boss.vy = Math.sin(ba) * spd;
+    // Splitter-specific init
+    if (bType.type === "splitter") {
+      boss.hasSplit = false;
+    }
+    // Sentinel-specific init
+    if (bType.type === "sentinel") {
+      boss.vx = 0;
+      boss.vy = 0;
+      boss.sentinelMinions = [];
+      boss.sentinelSpawnTimer = 5;
+      boss.shieldAngle = 0;
+    }
     enemies.push(boss);
   }
 
@@ -777,6 +801,7 @@ export class Game {
     this.fuseBurnIndex = 0;
     this.nearMissTime = 0;
     this.nearMissCooldown = 0;
+    this.poisonTimer = 0;
     this.weatherParticles = [];
     this.enemyExplosions = [];
     this.tireTrackGhosts = [];
@@ -950,6 +975,7 @@ export class Game {
     this.fuseTimer = 0;
     this.fuseBurnIndex = 0;
     this.nearMissTime = 0;
+    this.poisonTimer = 0;
     // Keep enemy count modest; spawner cells handle scaling
     this.state = this.createFreshState({
       enemyCount: Math.min(this.currentEnemyCount, 4),
@@ -986,6 +1012,7 @@ export class Game {
     this.comboTimer = 0;
     this.comboLevel = 0;
     this.streakCount = 0;
+    this.poisonTimer = 0;
 
     // Kill cam slow-mo
     this.killCamTime = 0.3;
@@ -1040,8 +1067,9 @@ export class Game {
 
   normalizeEnemySpeed(enemy) {
     const def = ENEMY_VARIANTS[enemy.variant || "normal"];
-    const minSpd = config.enemySpeedMin * def.speedMul;
-    const maxSpd = config.enemySpeedMax * def.speedMul;
+    const themeMul = this.currentTheme?.modifier?.enemySpeedMul ?? 1;
+    const minSpd = config.enemySpeedMin * def.speedMul * themeMul;
+    const maxSpd = config.enemySpeedMax * def.speedMul * themeMul;
     // Apply slow powerup
     const slowActive = this.state.activePowerups.some(p => p.type === "slow");
     const slowMul = slowActive ? 0.55 : 1;
@@ -1152,6 +1180,7 @@ export class Game {
     this.updateClaimParticles(dt);
     this.updateShockwaves(effectiveDt);
     this.updateFuseTimer(effectiveDt);
+    this.updatePoisonTimer(effectiveDt);
     this.updateNearMiss(effectiveDt);
     this.updateWeather(dt);
     this.updateEnemyExplosions(dt);
@@ -1208,11 +1237,23 @@ export class Game {
     const curRow = toCell(player.y, config.cell, rows - 1);
     const curIdx = cellToIndex(curCol, curRow, cols);
     const onClaimedOrBorder = claimed[curIdx] === 1 || curCol === 0 || curCol === cols - 1 || curRow === 0 || curRow === rows - 1;
-    const territorySpeedMul = onClaimedOrBorder && !player.trailActive ? 4 : 1;
+    const baseTerritorySpeed = this.currentTheme?.modifier?.territorySpeedMul ?? 4;
+    const territorySpeedMul = onClaimedOrBorder && !player.trailActive ? baseTerritorySpeed : 1;
 
     const prevAngle = player.angle;
-    player.vx = axis.x * player.speed * nitroSpeedMultiplier * speedPowerup * territorySpeedMul * carSpeedMul * skillSpeedMul;
-    player.vy = axis.y * player.speed * nitroSpeedMultiplier * speedPowerup * territorySpeedMul * carSpeedMul * skillSpeedMul;
+    const targetVx = axis.x * player.speed * nitroSpeedMultiplier * speedPowerup * territorySpeedMul * carSpeedMul * skillSpeedMul;
+    const targetVy = axis.y * player.speed * nitroSpeedMultiplier * speedPowerup * territorySpeedMul * carSpeedMul * skillSpeedMul;
+
+    // Inertia modifier: lerp velocity on unclaimed territory
+    const modifier = this.currentTheme?.modifier;
+    if (modifier?.type === "inertia" && !onClaimedOrBorder) {
+      const blend = 1 - Math.pow(modifier.inertiaDamping, dt * 60);
+      player.vx += (targetVx - player.vx) * blend;
+      player.vy += (targetVy - player.vy) * blend;
+    } else {
+      player.vx = targetVx;
+      player.vy = targetVy;
+    }
 
     if (axis.x !== 0 || axis.y !== 0) {
       player.angle = Math.atan2(axis.y, axis.x);
@@ -1488,6 +1529,16 @@ export class Game {
             enemy.respawnTimer = 999;
             this.addScore(2000);
             this.spawnEnemyExplosion(enemy.x, enemy.y, "#ffffff");
+            // Sentinel death: kill all minions
+            if (enemy.bossType === "sentinel" && enemy.sentinelMinions) {
+              for (const m of enemy.sentinelMinions) {
+                if (!m.dead) {
+                  m.dead = true;
+                  m.respawnTimer = 999;
+                  this.spawnEnemyExplosion(m.x, m.y, "#aa44ff");
+                }
+              }
+            }
           }
         }
       }
@@ -1522,6 +1573,7 @@ export class Game {
     // Reset fuse timer on successful claim
     this.fuseTimer = 0;
     this.fuseBurnIndex = 0;
+    this.poisonTimer = 0;
 
     if (this.state.claimedPercent >= config.winClaimPercent) {
       this.advanceLevel();
@@ -1711,40 +1763,95 @@ export class Game {
 
       // Boss variant: multi-phase AI
       if (enemy.variant === "boss") {
-        enemy.bossPhaseTimer -= dt;
-        if (enemy.bossPhaseTimer <= 0) {
-          // Cycle phases: roam -> charge -> spin -> roam
-          enemy.bossPhase = (enemy.bossPhase + 1) % 3;
-          if (enemy.bossPhase === 0) {
-            enemy.bossPhaseTimer = 3 + Math.random() * 2;
-          } else if (enemy.bossPhase === 1) {
-            // Charge at player
-            enemy.bossPhaseTimer = 0.8;
+        const bossType = enemy.bossType || "warlord";
+
+        // Sentinel: stationary, spawns minions
+        if (bossType === "sentinel") {
+          enemy.vx = 0;
+          enemy.vy = 0;
+          enemy.shieldAngle = (enemy.shieldAngle || 0) + dt * 2;
+          // Spawn minions periodically
+          enemy.sentinelSpawnTimer = (enemy.sentinelSpawnTimer ?? 5) - dt;
+          if (!enemy.sentinelMinions) enemy.sentinelMinions = [];
+          // Clean dead minions from tracking
+          enemy.sentinelMinions = enemy.sentinelMinions.filter(m => !m.dead);
+          if (enemy.sentinelSpawnTimer <= 0 && enemy.sentinelMinions.length < 2) {
+            enemy.sentinelSpawnTimer = 5;
+            const mAngle = Math.random() * Math.PI * 2;
+            const mx = clamp(enemy.x + Math.cos(mAngle) * 40, config.cell * 4, config.worldWidth - config.cell * 4);
+            const my = clamp(enemy.y + Math.sin(mAngle) * 40, config.cell * 4, config.worldHeight - config.cell * 4);
+            const minion = createEnemy(mx, my);
+            minion.variant = "normal";
+            minion.isSentinelMinion = true;
+            minion.parentBoss = enemy;
+            this.state.enemies.push(minion);
+            this.state.enemyCount = this.state.enemies.length;
+            enemy.sentinelMinions.push(minion);
+            this.shockwaves.push({ x: mx, y: my, radius: 0, maxRadius: 30, life: 0, maxLife: 0.3, color: "#aa44ff" });
+          }
+        }
+        // Splitter: roam/charge (2-phase), splits at half HP
+        else if (bossType === "splitter" || bossType === "splitter_mini") {
+          enemy.bossPhaseTimer -= dt;
+          if (enemy.bossPhaseTimer <= 0) {
+            enemy.bossPhase = (enemy.bossPhase + 1) % 2; // 2-phase only
+            if (enemy.bossPhase === 0) {
+              enemy.bossPhaseTimer = 3 + Math.random() * 2;
+            } else {
+              // Charge at player
+              enemy.bossPhaseTimer = 0.8;
+              const dx = playerX - enemy.x;
+              const dy = playerY - enemy.y;
+              const dist = Math.hypot(dx, dy);
+              if (dist > 1) {
+                const chargeSpd = config.enemySpeedMax * 1.8;
+                enemy.vx = (dx / dist) * chargeSpd;
+                enemy.vy = (dy / dist) * chargeSpd;
+              }
+            }
+          }
+          // Check for split at half HP
+          if (bossType === "splitter" && !enemy.hasSplit && enemy.bossHP <= Math.ceil(enemy.bossMaxHP / 2)) {
+            this.splitBoss(enemy);
+          }
+        }
+        // Warlord (default): existing 3-phase AI
+        else {
+          enemy.bossPhaseTimer -= dt;
+          if (enemy.bossPhaseTimer <= 0) {
+            // Cycle phases: roam -> charge -> spin -> roam
+            enemy.bossPhase = (enemy.bossPhase + 1) % 3;
+            if (enemy.bossPhase === 0) {
+              enemy.bossPhaseTimer = 3 + Math.random() * 2;
+            } else if (enemy.bossPhase === 1) {
+              // Charge at player
+              enemy.bossPhaseTimer = 0.8;
+              const dx = playerX - enemy.x;
+              const dy = playerY - enemy.y;
+              const dist = Math.hypot(dx, dy);
+              if (dist > 1) {
+                const chargeSpd = config.enemySpeedMax * 1.8;
+                enemy.vx = (dx / dist) * chargeSpd;
+                enemy.vy = (dy / dist) * chargeSpd;
+              }
+            } else {
+              // Spin phase: fast rotation, moderate tracking
+              enemy.bossPhaseTimer = 2 + Math.random();
+            }
+          }
+
+          // Spin phase: gentle tracking + fast spin
+          if (enemy.bossPhase === 2) {
             const dx = playerX - enemy.x;
             const dy = playerY - enemy.y;
             const dist = Math.hypot(dx, dy);
             if (dist > 1) {
-              const chargeSpd = config.enemySpeedMax * 1.8;
-              enemy.vx = (dx / dist) * chargeSpd;
-              enemy.vy = (dy / dist) * chargeSpd;
+              const nudge = 50 * dt;
+              enemy.vx += (dx / dist) * nudge;
+              enemy.vy += (dy / dist) * nudge;
             }
-          } else {
-            // Spin phase: fast rotation, moderate tracking
-            enemy.bossPhaseTimer = 2 + Math.random();
+            enemy.spin += dt * 18;
           }
-        }
-
-        // Spin phase: gentle tracking + fast spin
-        if (enemy.bossPhase === 2) {
-          const dx = playerX - enemy.x;
-          const dy = playerY - enemy.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist > 1) {
-            const nudge = 50 * dt;
-            enemy.vx += (dx / dist) * nudge;
-            enemy.vy += (dy / dist) * nudge;
-          }
-          enemy.spin += dt * 18;
         }
       }
 
@@ -2019,6 +2126,20 @@ export class Game {
         }
       }
     }
+
+    // Lethal sparks modifier: spark-to-player collision costs a life
+    const modifier = this.currentTheme?.modifier;
+    if (modifier?.sparkDamage && player.invuln <= 0 && !shielded && !onBorder) {
+      for (const spark of this.state.sparks) {
+        const dx = spark.x - player.x;
+        const dy = spark.y - player.y;
+        const dist = dx * dx + dy * dy;
+        if (dist <= (player.radius + 3) * (player.radius + 3)) {
+          this.loseLife();
+          return;
+        }
+      }
+    }
   }
 
   /** Exhaust trail particles from car */
@@ -2160,7 +2281,7 @@ export class Game {
       return;
     }
 
-    this.fuseTimer += dt;
+    this.fuseTimer += dt * (this.currentTheme?.modifier?.fuseSpeedMul ?? 1);
     if (this.fuseTimer < config.fuseTimerDuration) return;
 
     // Burn trail cells from the start
@@ -2189,6 +2310,68 @@ export class Game {
       this.fuseTimer = 0;
       this.fuseBurnIndex = 0;
     }
+  }
+
+  /** Poison zone: player loses a life after continuous time on unclaimed territory */
+  updatePoisonTimer(dt) {
+    const modifier = this.currentTheme?.modifier;
+    if (!modifier || modifier.type !== "poisonZone") {
+      this.poisonTimer = 0;
+      return;
+    }
+    const { player, claimed } = this.state;
+    const curCol = toCell(player.x, config.cell, cols - 1);
+    const curRow = toCell(player.y, config.cell, rows - 1);
+    const curIdx = cellToIndex(curCol, curRow, cols);
+    const onBorder = curCol === 0 || curCol === cols - 1 || curRow === 0 || curRow === rows - 1;
+    const onClaimedOrBorder = claimed[curIdx] === 1 || onBorder;
+
+    if (!onClaimedOrBorder && !player.trailActive) {
+      // On unclaimed territory without active trail — poison builds
+      this.poisonTimer += dt;
+    } else if (onClaimedOrBorder) {
+      this.poisonTimer = 0;
+    }
+
+    if (this.poisonTimer >= modifier.poisonDuration) {
+      this.poisonTimer = 0;
+      this.loseLife();
+    }
+  }
+
+  /** Split a splitter boss into 2 mini-bosses */
+  splitBoss(boss) {
+    boss.dead = true;
+    boss.respawnTimer = 999;
+    this.spawnEnemyExplosion(boss.x, boss.y, boss.variantColor, 1.5);
+    this.shockwaves.push({ x: boss.x, y: boss.y, radius: 0, maxRadius: 80, life: 0, maxLife: 0.5, color: "#44ff88" });
+    this.bombSlowMoTime = 0.6;
+
+    for (let i = 0; i < 2; i++) {
+      const angle = (i === 0) ? -Math.PI / 4 : Math.PI / 4;
+      const offsetX = Math.cos(angle) * 30;
+      const offsetY = Math.sin(angle) * 30;
+      const mini = createEnemy(
+        clamp(boss.x + offsetX, config.cell * 4, config.worldWidth - config.cell * 4),
+        clamp(boss.y + offsetY, config.cell * 4, config.worldHeight - config.cell * 4)
+      );
+      mini.variant = "boss";
+      mini.bossType = "splitter_mini";
+      mini.radius = Math.round(mini.radius * 1.2);
+      mini.spikeCount = 14;
+      mini.variantColor = "#66ffaa";
+      mini.bossHP = Math.max(1, Math.ceil(boss.bossMaxHP / 2));
+      mini.bossMaxHP = mini.bossHP;
+      mini.bossPhase = 0;
+      mini.bossPhaseTimer = 2 + Math.random() * 2;
+      mini.hasSplit = true; // prevent further splitting
+      const spd = config.enemySpeedMax * 1.3;
+      const a = Math.random() * Math.PI * 2;
+      mini.vx = Math.cos(a) * spd;
+      mini.vy = Math.sin(a) * spd;
+      this.state.enemies.push(mini);
+    }
+    this.state.enemyCount = this.state.enemies.length;
   }
 
   /** Spawn bonus zones in unclaimed territory */
@@ -2503,6 +2686,16 @@ export class Game {
           enemy.dead = true;
           enemy.respawnTimer = 999;
           deadEnemies.push(enemy);
+          // Sentinel death: kill all minions
+          if (enemy.bossType === "sentinel" && enemy.sentinelMinions) {
+            for (const m of enemy.sentinelMinions) {
+              if (!m.dead) {
+                m.dead = true;
+                m.respawnTimer = 999;
+                deadEnemies.push(m);
+              }
+            }
+          }
         } else {
           enemy.stunTimer = 1.5;
           enemy.preStunVx = enemy.vx;
@@ -2574,6 +2767,7 @@ export class Game {
   /** Spawn warp tunnels on opposite borders */
   spawnWarpTunnels() {
     this.warpTunnels = [];
+    if (this.currentTheme?.modifier?.noWarps) return;
     // Horizontal pair (left <-> right)
     const hRow = 10 + Math.floor(Math.random() * (rows - 20));
     this.warpTunnels.push({
@@ -2592,6 +2786,7 @@ export class Game {
 
   /** Check if player stepped on a warp portal */
   checkWarpTunnels() {
+    if (this.currentTheme?.modifier?.noWarps) return;
     const { player } = this.state;
     const warpRadius = config.cell * 2;
     for (const warp of this.warpTunnels) {
@@ -2647,7 +2842,8 @@ export class Game {
       if (this.state.claimed[sc.idx]) continue;
       // Only spawn if no living enemy from this spawner
       if (sc.spawnedEnemy && !sc.spawnedEnemy.dead) continue;
-      sc.spawnTimer -= dt;
+      const spawnerSpeedMul = 1 / (this.currentTheme?.modifier?.spawnerMul ?? 1);
+      sc.spawnTimer -= dt * spawnerSpeedMul;
       if (sc.spawnTimer <= 0) {
         sc.spawnTimer = sc.maxSpawnTimer;
         const x = (sc.col + 0.5) * config.cell;
@@ -2943,6 +3139,7 @@ export class Game {
       bombInventory: this.bombInventory,
       elapsedSeconds: this.elapsedSeconds,
       levelStartTime: this.levelStartTime,
+      poisonTimer: this.poisonTimer,
     });
   }
 
@@ -2962,6 +3159,7 @@ export class Game {
     this.elapsedSeconds = save.elapsedSeconds || 0;
     this.levelStartTime = save.levelStartTime || 0;
     this.currentTheme = getThemeForLevel(this.currentLevel);
+    this.poisonTimer = save.poisonTimer || 0;
 
     this.state = this.createFreshState({
       enemyCount: this.currentEnemyCount,
@@ -3074,6 +3272,7 @@ export class Game {
       nearMissTime: this.nearMissTime,
       fuseTimer: this.fuseTimer,
       fuseTimerDuration: config.fuseTimerDuration,
+      poisonTimer: this.poisonTimer,
       fuseBurnIndex: this.fuseBurnIndex,
       weatherParticles: this.weatherParticles,
       enemyExplosions: this.enemyExplosions,
