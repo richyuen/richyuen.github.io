@@ -22,31 +22,37 @@
 
     <!-- Navigation -->
     <nav class="nav">
+        <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+            <span class="nav-toggle-bar"></span>
+            <span class="nav-toggle-bar"></span>
+            <span class="nav-toggle-bar"></span>
+        </button>
         <a href="#home" class="nav-link">Home</a>
         <a href="#projects" class="nav-link">Projects</a>
+        <a href="#skills" class="nav-link">Skills</a>
         <a href="#bio" class="nav-link">Bio</a>
         <a href="math-game.html" class="nav-link">Math Game</a>
         <a href="RoadRageQix/" class="nav-link">Road Rage Qix</a>
-        <a href="#contact" class="nav-link">Contact</a>
     </nav>
 
     <!-- Hero Section -->
     <section id="home" class="hero">
+        <canvas id="hero-particles"></canvas>
         <div class="hero-content">
             <div class="hero-text">
                 <h1 class="hero-title" id="hero-title">
                     <span class="gradient-text">Hello, I'm</span><br>
                     <span class="gradient-text glitch" data-text="Richard Yuen">Richard Yuen</span>
                 </h1>
-                <p class="hero-subtitle">Developer • Designer • Creator</p>
-                <p class="hero-description">Building digital experiences that make a difference</p>
+                <p class="hero-subtitle">Investor • Developer • Builder</p>
+                <p class="hero-description">MBA and technologist bridging finance and code</p>
             </div>
         </div>
     </section>
 
     <!-- Projects Section -->
     <section id="projects" class="projects">
-        <h2 class="section-title gradient-text">Featured Projects</h2>
+        <h2 class="section-title gradient-text" data-reveal>Featured Projects</h2>
         <div class="projects-grid">
             <div class="project-card" data-reveal>
                 <div class="project-gradient-border"></div>
@@ -76,91 +82,55 @@
                 </div>
             </div>
 
-            <div class="project-card" data-reveal>
-                <div class="project-gradient-border"></div>
-                <div class="project-content">
-                    <h3 class="project-title">Weather Dashboard 🌤️</h3>
-                    <p class="project-description">Real-time weather tracking application with interactive maps, forecasts, and severe weather alerts. Features location-based predictions and beautiful data visualizations.</p>
-                    <div class="project-tags">
-                        <span class="tag">React</span>
-                        <span class="tag">Weather API</span>
-                        <span class="tag">Charts.js</span>
-                    </div>
-                    <a href="weather-dashboard.html" class="project-link">View Project →</a>
-                </div>
-            </div>
+        </div>
+    </section>
 
-            <div class="project-card" data-reveal>
-                <div class="project-gradient-border"></div>
-                <div class="project-content">
-                    <h3 class="project-title">S&P 500 Dashboard 📈</h3>
-                    <p class="project-description">Real-time S&P 500 market dashboard with 1-year price history chart and live price updates. Features interactive charts, 52-week high/low stats, and automatic data refresh.</p>
-                    <div class="project-tags">
-                        <span class="tag">JavaScript</span>
-                        <span class="tag">Plotly.js</span>
-                        <span class="tag">Yahoo Finance</span>
-                    </div>
-                    <a href="sp500-dashboard.html" class="project-link">View Project →</a>
-                </div>
+    <!-- Skills Section -->
+    <section id="skills" class="skills">
+        <h2 class="section-title gradient-text" data-reveal>Tech & Tools</h2>
+        <div class="skills-grid">
+            <div class="skill-card" data-reveal>
+                <span class="skill-icon">JS</span>
+                <span class="skill-name">JavaScript</span>
             </div>
-
-            <div class="project-card" data-reveal>
-                <div class="project-gradient-border"></div>
-                <div class="project-content">
-                    <h3 class="project-title">Recipe Finder 🍳</h3>
-                    <p class="project-description">Discover recipes based on ingredients you have at home. Features nutritional information, cooking timers, and the ability to save your favorite recipes with custom notes.</p>
-                    <div class="project-tags">
-                        <span class="tag">Node.js</span>
-                        <span class="tag">MongoDB</span>
-                        <span class="tag">REST API</span>
-                    </div>
-                    <a href="recipe-finder.html" class="project-link">View Project →</a>
-                </div>
+            <div class="skill-card" data-reveal>
+                <span class="skill-icon">PY</span>
+                <span class="skill-name">Python</span>
+            </div>
+            <div class="skill-card" data-reveal>
+                <span class="skill-icon">&lt;/&gt;</span>
+                <span class="skill-name">HTML / CSS</span>
+            </div>
+            <div class="skill-card" data-reveal>
+                <span class="skill-icon">SQL</span>
+                <span class="skill-name">Databases</span>
+            </div>
+            <div class="skill-card" data-reveal>
+                <span class="skill-icon">&#127918;</span>
+                <span class="skill-name">Game Dev</span>
+            </div>
+            <div class="skill-card" data-reveal>
+                <span class="skill-icon">&#128200;</span>
+                <span class="skill-name">Finance</span>
             </div>
         </div>
     </section>
 
     <!-- Bio Section -->
     <section id="bio" class="bio">
-        <h2 class="section-title gradient-text">About Me</h2>
+        <h2 class="section-title gradient-text" data-reveal>About Me</h2>
         <div class="bio-content">
-            <p class="bio-text drop-cap">
-                <span class="first-letter">I</span>'m a passionate developer and creative thinker with a love for building beautiful, functional digital experiences. With years of experience in web development, I specialize in creating user-centric applications that solve real-world problems.
+            <p class="bio-text drop-cap" data-reveal>
+                <span class="first-letter">I</span>'m an MBA with over <span id="years-experience"></span> years of investment experience. My career has spanned equity research, portfolio management, and market analysis across global financial markets.
             </p>
-            <div class="gradient-divider"></div>
-            <p class="bio-text">
-                My journey in tech started with a curiosity about how things work. Today, I combine technical expertise with creative design to build products that people love to use. When I'm not coding, you can find me exploring new technologies, contributing to open source, or sharing knowledge with the community.
+            <div class="gradient-divider" data-reveal></div>
+            <p class="bio-text" data-reveal>
+                Outside of finance, I've developed a passion for building software from scratch. I enjoy applying the same analytical and quantitative thinking from investing to writing code — whether it's game mechanics, data visualizations, or interactive web apps.
             </p>
-            <div class="gradient-divider"></div>
-            <p class="bio-text">
-                I believe in the power of technology to make positive change. Whether it's through clean code, thoughtful design, or innovative solutions, I'm always looking for ways to push boundaries and create something meaningful.
+            <div class="gradient-divider" data-reveal></div>
+            <p class="bio-text" data-reveal>
+                The projects on this site are things I've built for fun and learning, combining creativity with problem-solving. I'm always looking for new ideas to prototype and bring to life.
             </p>
-        </div>
-    </section>
-
-    <!-- Contact Section -->
-    <section id="contact" class="contact">
-        <h2 class="section-title gradient-text">Get In Touch</h2>
-        <div class="contact-content">
-            <p class="contact-text">Interested in working together? Let's create something amazing.</p>
-            <div class="contact-links">
-                <a href="mailto:your.email@example.com" class="contact-link">
-                    <span class="link-label">Email</span>
-                    <span class="link-value">your.email@example.com</span>
-                </a>
-                <a href="https://github.com/yourusername" class="contact-link" target="_blank" rel="noopener">
-                    <span class="link-label">GitHub</span>
-                    <span class="link-value">@yourusername</span>
-                </a>
-                <a href="https://twitter.com/yourusername" class="contact-link" target="_blank" rel="noopener">
-                    <span class="link-label">X</span>
-                    <span class="link-value">@yourusername</span>
-                </a>
-                <a href="https://linkedin.com/in/yourusername" class="contact-link" target="_blank" rel="noopener">
-                    <span class="link-label">LinkedIn</span>
-                    <span class="link-value">/in/yourusername</span>
-                </a>
-            </div>
         </div>
     </section>
 

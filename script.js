@@ -1,4 +1,30 @@
 // ============================================
+// YEARS OF EXPERIENCE (base year: 2022 = 14 years)
+// ============================================
+const yearsEl = document.getElementById('years-experience');
+if (yearsEl) {
+    yearsEl.textContent = new Date().getFullYear() - 2002;
+}
+
+// ============================================
+// MOBILE HAMBURGER MENU
+// ============================================
+const navToggle = document.getElementById('navToggle');
+const nav = document.querySelector('.nav');
+
+navToggle.addEventListener('click', () => {
+    nav.classList.toggle('open');
+    navToggle.setAttribute('aria-expanded', nav.classList.contains('open'));
+});
+
+document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', () => {
+        nav.classList.remove('open');
+        navToggle.setAttribute('aria-expanded', 'false');
+    });
+});
+
+// ============================================
 // CURSOR TRAIL
 // ============================================
 const canvas = document.getElementById('cursor-trail');
@@ -63,6 +89,87 @@ window.addEventListener('resize', () => {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 });
+
+// ============================================
+// HERO PARTICLE NETWORK
+// ============================================
+(() => {
+    const heroCanvas = document.getElementById('hero-particles');
+    const heroCtx = heroCanvas.getContext('2d');
+    const hero = document.querySelector('.hero');
+    const isMobile = window.innerWidth < 768;
+    const particleCount = isMobile ? 40 : 80;
+    const connectionDist = 120;
+    let heroVisible = true;
+    let heroParticles = [];
+
+    function resizeHeroCanvas() {
+        heroCanvas.width = hero.offsetWidth;
+        heroCanvas.height = hero.offsetHeight;
+    }
+    resizeHeroCanvas();
+    window.addEventListener('resize', resizeHeroCanvas);
+
+    // Pause when hero is off-screen
+    new IntersectionObserver(([entry]) => {
+        heroVisible = entry.isIntersecting;
+    }, { threshold: 0 }).observe(hero);
+
+    for (let i = 0; i < particleCount; i++) {
+        heroParticles.push({
+            x: Math.random() * heroCanvas.width,
+            y: Math.random() * heroCanvas.height,
+            vx: (Math.random() - 0.5) * 0.6,
+            vy: (Math.random() - 0.5) * 0.6,
+            r: Math.random() * 1.5 + 0.5,
+            color: Math.random() > 0.5 ? 'rgba(0,255,255,' : 'rgba(255,0,255,',
+            alpha: Math.random() * 0.3 + 0.2
+        });
+    }
+
+    function animateHeroParticles() {
+        requestAnimationFrame(animateHeroParticles);
+        if (!heroVisible) return;
+
+        const w = heroCanvas.width;
+        const h = heroCanvas.height;
+        heroCtx.clearRect(0, 0, w, h);
+
+        for (const p of heroParticles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            if (p.x < 0) p.x = w;
+            if (p.x > w) p.x = 0;
+            if (p.y < 0) p.y = h;
+            if (p.y > h) p.y = 0;
+
+            heroCtx.beginPath();
+            heroCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            heroCtx.fillStyle = p.color + p.alpha + ')';
+            heroCtx.fill();
+        }
+
+        // Draw connections
+        for (let i = 0; i < heroParticles.length; i++) {
+            for (let j = i + 1; j < heroParticles.length; j++) {
+                const a = heroParticles[i];
+                const b = heroParticles[j];
+                const dx = a.x - b.x;
+                const dy = a.y - b.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < connectionDist) {
+                    const lineAlpha = (1 - dist / connectionDist) * 0.12;
+                    heroCtx.beginPath();
+                    heroCtx.moveTo(a.x, a.y);
+                    heroCtx.lineTo(b.x, b.y);
+                    heroCtx.strokeStyle = 'rgba(0,255,255,' + lineAlpha + ')';
+                    heroCtx.stroke();
+                }
+            }
+        }
+    }
+    animateHeroParticles();
+})();
 
 // ============================================
 // SMOOTH SCROLL FOR NAVIGATION
@@ -272,30 +379,6 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// ============================================
-// TYPING EFFECT FOR HERO SUBTITLE (Optional)
-// ============================================
-function typeWriter(element, text, speed = 100) {
-    let i = 0;
-    element.textContent = '';
-
-    function type() {
-        if (i < text.length) {
-            element.textContent += text.charAt(i);
-            i++;
-            setTimeout(type, speed);
-        }
-    }
-
-    type();
-}
-
-// Uncomment to enable typing effect on page load
-// window.addEventListener('load', () => {
-//     const subtitle = document.querySelector('.hero-subtitle');
-//     const originalText = subtitle.textContent;
-//     typeWriter(subtitle, originalText, 80);
-// });
 
 console.log('%c🚀 Welcome to my portfolio!', 'color: #00FFFF; font-size: 20px; font-weight: bold;');
 console.log('%cBuilt with passion and code', 'color: #FF00FF; font-size: 14px;');
