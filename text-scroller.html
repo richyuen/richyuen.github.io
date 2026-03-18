@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Scroller - Richard Yuen</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cyan: #00FFFF;
+            --magenta: #FF00FF;
+            --dark-bg: #0a0a0f;
+            --darker-bg: #050508;
+            --card-bg: #12121a;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --gradient: linear-gradient(135deg, var(--cyan), var(--magenta));
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Space Mono', monospace;
+            background-color: var(--dark-bg);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Back link */
+        .back-link {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            font-family: 'Silkscreen', cursive;
+            font-size: 0.9rem;
+            color: var(--cyan);
+            text-decoration: none;
+            z-index: 100;
+            transition: color 0.3s;
+        }
+        .back-link:hover { color: var(--magenta); }
+
+        /* Scroller display area */
+        .scroller-stage {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+
+        .scroll-text {
+            position: absolute;
+            white-space: nowrap;
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: clamp(4rem, 15vw, 12rem);
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            background-size: 200% 200%;
+            animation: gradient-shift 3s ease infinite;
+            user-select: none;
+            filter: drop-shadow(0 0 30px rgba(0, 255, 255, 0.3)) drop-shadow(0 0 60px rgba(255, 0, 255, 0.2));
+            will-change: transform;
+        }
+
+        @keyframes gradient-shift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        /* Scanline overlay */
+        .scroller-stage::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.08) 2px,
+                rgba(0, 0, 0, 0.08) 4px
+            );
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* Controls panel */
+        .controls {
+            background: var(--card-bg);
+            border-top: 1px solid rgba(0, 255, 255, 0.2);
+            padding: 20px 30px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            z-index: 10;
+        }
+
+        .controls label {
+            font-family: 'Silkscreen', cursive;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .controls input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 16px;
+            font-family: 'Space Mono', monospace;
+            font-size: 1rem;
+            color: var(--text-primary);
+            background: var(--darker-bg);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .controls input[type="text"]:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+        }
+
+        .controls input[type="range"] {
+            width: 100px;
+            accent-color: var(--cyan);
+        }
+
+        .controls select {
+            padding: 8px 12px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            background: var(--darker-bg);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 8px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .controls select:focus {
+            border-color: var(--cyan);
+        }
+
+        .btn {
+            font-family: 'Silkscreen', cursive;
+            font-size: 0.8rem;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: var(--dark-bg);
+            background: var(--gradient);
+            font-weight: 700;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 255, 255, 0.4);
+        }
+
+        .placeholder-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Silkscreen', cursive;
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            opacity: 0.5;
+            text-align: center;
+            line-height: 2;
+        }
+
+        @media (max-width: 600px) {
+            .controls {
+                padding: 15px;
+                gap: 10px;
+            }
+            .controls input[type="text"] {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-link">&lt; Back</a>
+
+    <div class="scroller-stage" id="stage">
+        <div class="placeholder-text" id="placeholder">Type your message below<br>and hit Scroll</div>
+    </div>
+
+    <div class="controls">
+        <input type="text" id="textInput" placeholder="Enter your message..." maxlength="200" autofocus>
+        <button class="btn" id="scrollBtn">Scroll</button>
+
+        <label>
+            Speed
+            <input type="range" id="speedSlider" min="1" max="10" value="5">
+        </label>
+
+        <label>
+            Color
+            <select id="colorSelect">
+                <option value="gradient">Gradient</option>
+                <option value="cyan">Cyan</option>
+                <option value="magenta">Magenta</option>
+                <option value="green">Green</option>
+                <option value="gold">Gold</option>
+            </select>
+        </label>
+    </div>
+
+    <script>
+        const stage = document.getElementById('stage');
+        const textInput = document.getElementById('textInput');
+        const scrollBtn = document.getElementById('scrollBtn');
+        const speedSlider = document.getElementById('speedSlider');
+        const colorSelect = document.getElementById('colorSelect');
+        const placeholder = document.getElementById('placeholder');
+
+        let activeElement = null;
+        let animationId = null;
+
+        const colorMap = {
+            gradient: { background: 'linear-gradient(135deg, #00FFFF, #FF00FF)', filter: 'drop-shadow(0 0 30px rgba(0,255,255,0.3)) drop-shadow(0 0 60px rgba(255,0,255,0.2))' },
+            cyan:     { background: '#00FFFF', filter: 'drop-shadow(0 0 40px rgba(0,255,255,0.4))' },
+            magenta:  { background: '#FF00FF', filter: 'drop-shadow(0 0 40px rgba(255,0,255,0.4))' },
+            green:    { background: '#39FF14', filter: 'drop-shadow(0 0 40px rgba(57,255,20,0.4))' },
+            gold:     { background: '#FFD700', filter: 'drop-shadow(0 0 40px rgba(255,215,0,0.4))' },
+        };
+
+        function startScroll() {
+            const text = textInput.value.trim();
+            if (!text) return;
+
+            // Clean up previous
+            if (animationId) cancelAnimationFrame(animationId);
+            if (activeElement) activeElement.remove();
+
+            placeholder.style.display = 'none';
+
+            // Create scrolling element
+            const el = document.createElement('div');
+            el.className = 'scroll-text';
+            el.textContent = text;
+
+            const color = colorMap[colorSelect.value];
+            el.style.background = color.background;
+            el.style.webkitBackgroundClip = 'text';
+            el.style.webkitTextFillColor = 'transparent';
+            el.style.backgroundClip = 'text';
+            if (colorSelect.value === 'gradient') {
+                el.style.backgroundSize = '200% 200%';
+            }
+            el.style.filter = color.filter;
+
+            stage.appendChild(el);
+            activeElement = el;
+
+            // Start from right edge
+            let x = stage.offsetWidth;
+            const speed = speedSlider.value * 0.8 + 1; // 1.8 to 9
+
+            function animate() {
+                x -= speed;
+                el.style.transform = `translateX(${x}px)`;
+
+                // Reset when fully off left side
+                if (x < -el.offsetWidth) {
+                    x = stage.offsetWidth;
+                }
+
+                animationId = requestAnimationFrame(animate);
+            }
+
+            animate();
+        }
+
+        scrollBtn.addEventListener('click', startScroll);
+
+        textInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') startScroll();
+        });
+    </script>
+</body>
+</html>
