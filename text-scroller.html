@@ -61,6 +61,8 @@
             font-family: 'Syne', sans-serif;
             font-weight: 800;
             line-height: 1;
+            word-spacing: 0.3em;
+            letter-spacing: 0.02em;
             background: var(--gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -327,7 +329,8 @@
         function getTextSize() {
             const stageHeight = stage.offsetHeight;
             const pct = sizeSlider.value / 100;
-            return stageHeight * 0.75 * pct;
+            // Use 0.95 so the text nearly fills the full stage height
+            return stageHeight * 0.95 * pct;
         }
 
         function updateFontSize() {
@@ -373,6 +376,13 @@
 
             stage.appendChild(el);
             activeElement = el;
+
+            // If text fits within the stage, center it instead of scrolling
+            if (el.offsetWidth <= stage.offsetWidth) {
+                el.style.left = '50%';
+                el.style.transform = 'translateX(-50%)';
+                return;
+            }
 
             // Start from right edge
             let x = stage.offsetWidth;
