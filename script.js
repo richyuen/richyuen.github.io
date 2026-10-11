@@ -25,153 +25,6 @@ document.querySelectorAll('.nav-link').forEach(link => {
 });
 
 // ============================================
-// CURSOR TRAIL
-// ============================================
-const canvas = document.getElementById('cursor-trail');
-const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-
-const particles = [];
-const maxParticles = 50;
-
-class Particle {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.size = Math.random() * 3 + 1;
-        this.speedX = Math.random() * 2 - 1;
-        this.speedY = Math.random() * 2 - 1;
-        this.color = Math.random() > 0.5 ? '#00FFFF' : '#FF00FF';
-        this.life = 1;
-    }
-
-    update() {
-        this.x += this.speedX;
-        this.y += this.speedY;
-        this.life -= 0.02;
-        if (this.size > 0.2) this.size -= 0.05;
-    }
-
-    draw() {
-        ctx.fillStyle = this.color;
-        ctx.globalAlpha = this.life;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.fill();
-    }
-}
-
-document.addEventListener('mousemove', (e) => {
-    if (particles.length < maxParticles) {
-        particles.push(new Particle(e.clientX, e.clientY));
-    }
-});
-
-function animateParticles() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    for (let i = particles.length - 1; i >= 0; i--) {
-        particles[i].update();
-        particles[i].draw();
-
-        if (particles[i].life <= 0) {
-            particles.splice(i, 1);
-        }
-    }
-
-    requestAnimationFrame(animateParticles);
-}
-
-animateParticles();
-
-window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-});
-
-// ============================================
-// HERO PARTICLE NETWORK
-// ============================================
-(() => {
-    const heroCanvas = document.getElementById('hero-particles');
-    const heroCtx = heroCanvas.getContext('2d');
-    const hero = document.querySelector('.hero');
-    const isMobile = window.innerWidth < 768;
-    const particleCount = isMobile ? 40 : 80;
-    const connectionDist = 120;
-    let heroVisible = true;
-    let heroParticles = [];
-
-    function resizeHeroCanvas() {
-        heroCanvas.width = hero.offsetWidth;
-        heroCanvas.height = hero.offsetHeight;
-    }
-    resizeHeroCanvas();
-    window.addEventListener('resize', resizeHeroCanvas);
-
-    // Pause when hero is off-screen
-    new IntersectionObserver(([entry]) => {
-        heroVisible = entry.isIntersecting;
-    }, { threshold: 0 }).observe(hero);
-
-    for (let i = 0; i < particleCount; i++) {
-        heroParticles.push({
-            x: Math.random() * heroCanvas.width,
-            y: Math.random() * heroCanvas.height,
-            vx: (Math.random() - 0.5) * 0.6,
-            vy: (Math.random() - 0.5) * 0.6,
-            r: Math.random() * 1.5 + 0.5,
-            color: Math.random() > 0.5 ? 'rgba(0,255,255,' : 'rgba(255,0,255,',
-            alpha: Math.random() * 0.3 + 0.2
-        });
-    }
-
-    function animateHeroParticles() {
-        requestAnimationFrame(animateHeroParticles);
-        if (!heroVisible) return;
-
-        const w = heroCanvas.width;
-        const h = heroCanvas.height;
-        heroCtx.clearRect(0, 0, w, h);
-
-        for (const p of heroParticles) {
-            p.x += p.vx;
-            p.y += p.vy;
-            if (p.x < 0) p.x = w;
-            if (p.x > w) p.x = 0;
-            if (p.y < 0) p.y = h;
-            if (p.y > h) p.y = 0;
-
-            heroCtx.beginPath();
-            heroCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-            heroCtx.fillStyle = p.color + p.alpha + ')';
-            heroCtx.fill();
-        }
-
-        // Draw connections
-        for (let i = 0; i < heroParticles.length; i++) {
-            for (let j = i + 1; j < heroParticles.length; j++) {
-                const a = heroParticles[i];
-                const b = heroParticles[j];
-                const dx = a.x - b.x;
-                const dy = a.y - b.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist < connectionDist) {
-                    const lineAlpha = (1 - dist / connectionDist) * 0.12;
-                    heroCtx.beginPath();
-                    heroCtx.moveTo(a.x, a.y);
-                    heroCtx.lineTo(b.x, b.y);
-                    heroCtx.strokeStyle = 'rgba(0,255,255,' + lineAlpha + ')';
-                    heroCtx.stroke();
-                }
-            }
-        }
-    }
-    animateHeroParticles();
-})();
-
-// ============================================
 // SMOOTH SCROLL FOR NAVIGATION
 // ============================================
 document.querySelectorAll('.nav-link').forEach(link => {
@@ -190,12 +43,12 @@ document.querySelectorAll('.nav-link').forEach(link => {
                 });
             }
         }
-        // For other links (like math-game.html), let them work normally
+        // External links navigate normally
     });
 });
 
 // ============================================
-// PROJECT CARDS REVEAL ON SCROLL
+// REVEAL ON SCROLL
 // ============================================
 const revealElements = document.querySelectorAll('[data-reveal]');
 
@@ -218,68 +71,79 @@ revealElements.forEach(element => {
 });
 
 // ============================================
-// HERO TITLE FIREWORKS EFFECT
+// HOLOGRAPHIC TILT (hero card + project cards)
+// Writes transform only on .holo-card; perspective comes from
+// .holo-scene in CSS, and data-reveal lives on the scene so the
+// reveal animation never fights the tilt transform.
 // ============================================
-const heroTitle = document.getElementById('hero-title');
-let fireworksActive = false;
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const activeHolo = new Set();
 
-heroTitle.addEventListener('click', () => {
-    if (fireworksActive) return;
+function initHolo(el, { maxTilt = 14, lerp = 0.1 } = {}) {
+    if (REDUCED_MOTION) return; // CSS pins the foil at half opacity instead
 
-    fireworksActive = true;
-    const fireworksCount = 50;
-    const colors = ['#00FFFF', '#FF00FF', '#00FF00', '#FFFF00'];
+    const s = { el, tx: 0, ty: 0, cx: 0, cy: 0, raf: 0 };
 
-    // Get the center of the hero title
-    const rect = heroTitle.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
+    const tick = () => {
+        s.cx += (s.tx - s.cx) * lerp;
+        s.cy += (s.ty - s.cy) * lerp;
+        el.style.transform = `rotateX(${s.cx}deg) rotateY(${s.cy}deg)`;
 
-    for (let i = 0; i < fireworksCount; i++) {
-        const firework = document.createElement('div');
-        firework.style.position = 'fixed';
-        firework.style.left = centerX + 'px';
-        firework.style.top = centerY + 'px';
-        firework.style.width = '10px';
-        firework.style.height = '10px';
-        firework.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-        firework.style.pointerEvents = 'none';
-        firework.style.zIndex = '9999';
-        firework.style.borderRadius = '50%';
-        firework.style.boxShadow = `0 0 10px ${colors[Math.floor(Math.random() * colors.length)]}`;
+        if (Math.abs(s.tx - s.cx) + Math.abs(s.ty - s.cy) < 0.01) {
+            s.cx = s.tx;
+            s.cy = s.ty;
+            s.raf = 0;
+            activeHolo.delete(s);
+            return;
+        }
+        s.raf = requestAnimationFrame(tick);
+    };
 
-        document.body.appendChild(firework);
+    const start = () => {
+        if (!s.raf && !document.hidden) {
+            activeHolo.add(s);
+            s.raf = requestAnimationFrame(tick);
+        }
+    };
 
-        const angle = (Math.PI * 2 * i) / fireworksCount;
-        const velocity = 5 + Math.random() * 10;
-        const vx = Math.cos(angle) * velocity;
-        const vy = Math.sin(angle) * velocity;
+    const setFromPointer = (e) => {
+        if (e.pointerType === 'touch') return; // avoid wobble while scrolling
+        const r = el.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width;   // 0..1
+        const py = (e.clientY - r.top) / r.height;
+        s.ty = (px - 0.5) * 2 * maxTilt;              // rotateY from X
+        s.tx = (0.5 - py) * 2 * maxTilt;              // rotateX from Y (inverted)
+        el.style.setProperty('--pos-x', `${px * 100}%`);
+        el.style.setProperty('--pos-y', `${py * 100}%`);
+        start();
+    };
 
-        let x = 0;
-        let y = 0;
-        let opacity = 1;
+    const reset = () => {
+        s.tx = 0;
+        s.ty = 0;
+        el.style.setProperty('--pos-x', '50%');
+        el.style.setProperty('--pos-y', '50%');
+        start();
+    };
 
-        const animate = () => {
-            x += vx;
-            y += vy + 2;
-            opacity -= 0.015;
+    el.addEventListener('pointermove', setFromPointer);
+    el.addEventListener('pointerdown', setFromPointer);
+    el.addEventListener('pointerleave', reset);
+    el.addEventListener('blur', reset);
+}
 
-            firework.style.transform = `translate(${x}px, ${y}px)`;
-            firework.style.opacity = opacity;
+document.querySelectorAll('.holo-card').forEach(card => {
+    initHolo(card, { maxTilt: Number(card.dataset.tilt) || 14 });
+});
 
-            if (opacity > 0) {
-                requestAnimationFrame(animate);
-            } else {
-                firework.remove();
-            }
-        };
-
-        animate();
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        activeHolo.forEach(s => {
+            cancelAnimationFrame(s.raf);
+            s.raf = 0;
+        });
+        activeHolo.clear();
     }
-
-    setTimeout(() => {
-        fireworksActive = false;
-    }, 1000);
 });
 
 // ============================================
@@ -328,57 +192,4 @@ window.addEventListener('scroll', () => {
     });
 });
 
-// ============================================
-// PARALLAX EFFECT FOR FLOATING PIXELS
-// ============================================
-window.addEventListener('scroll', () => {
-    const scrolled = window.pageYOffset;
-    const pixels = document.querySelectorAll('.pixel-float');
-
-    pixels.forEach((pixel, index) => {
-        const speed = 0.5 + (index * 0.1);
-        pixel.style.transform = `translateY(${scrolled * speed}px)`;
-    });
-});
-
-// ============================================
-// GRADIENT TEXT ANIMATION
-// ============================================
-const gradientTexts = document.querySelectorAll('.gradient-text');
-
-gradientTexts.forEach(text => {
-    text.style.backgroundSize = '200% 200%';
-});
-
-// ============================================
-// EASTER EGG: KONAMI CODE
-// ============================================
-let konamiCode = [];
-const konamiPattern = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
-
-document.addEventListener('keydown', (e) => {
-    konamiCode.push(e.key);
-    konamiCode = konamiCode.slice(-10);
-
-    if (konamiCode.join(',') === konamiPattern.join(',')) {
-        document.body.style.animation = 'rainbow 2s linear infinite';
-
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes rainbow {
-                0% { filter: hue-rotate(0deg); }
-                100% { filter: hue-rotate(360deg); }
-            }
-        `;
-        document.head.appendChild(style);
-
-        setTimeout(() => {
-            document.body.style.animation = '';
-            style.remove();
-        }, 5000);
-    }
-});
-
-
-console.log('%c🚀 Welcome to my portfolio!', 'color: #00FFFF; font-size: 20px; font-weight: bold;');
-console.log('%cBuilt with passion and code', 'color: #FF00FF; font-size: 14px;');
+console.log('%cRichard Yuen', 'font-weight: bold;');

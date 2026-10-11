@@ -4,14 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Personal portfolio site (`RYWebsite`) with a cyberpunk landing page and multiple standalone web apps, including a modular HTML5 canvas game (RoadRageQix). No build pipeline — vanilla HTML/CSS/JS served directly. Hosted on GitHub Pages.
+Personal portfolio site (`RYWebsite`) with a holographic-foil dark landing page (near-black, white ink, slate text, pointer-tracking rainbow foil + 3D tilt cards), one standalone page, and a modular HTML5 canvas game (RoadRageQix). No build pipeline — vanilla HTML/CSS/JS served directly. Hosted on GitHub Pages.
 
 ## Repository Layout
 
 - Root portfolio: `index.html`, `styles.css`, `script.js`
-- Standalone pages: `math-game.html`, `weather-dashboard.html`, `sp500-dashboard.html`, `recipe-finder.html`
+- Standalone page: `text-scroller.html`
 - Site config/assets: `favicon.svg`, `CNAME`
 - Game project: `RoadRageQix/` (see architecture section below)
+- External projects deployed to subpaths of richardyuen.com from separate repos (not in this repo): `MOVBattle/`, `WarSim/`, `Cities/` (Blox Skylines)
 
 ## Local Development
 
@@ -38,7 +39,7 @@ Debug query params: `?touch=1` forces touch UI, `?portrait=1` forces portrait ro
 ## Architecture
 
 ### Portfolio (root)
-`index.html` + `styles.css` + `script.js` — single-page landing with smooth scroll, cursor trail particles, and project cards. Standalone demo pages are self-contained HTML files.
+`index.html` + `styles.css` + `script.js` — single-page landing with smooth scroll, scroll reveal, and holographic tilt cards (`initHolo` in `script.js`, `.holo-*` classes in `styles.css`). Each project card is a `.holo-scene[data-reveal] > a.holo-card` block; the reveal wrapper and the tilting element must stay separate. Nav links are section anchors only (Home / Projects / Skills / Bio). `text-scroller.html` is a self-contained standalone page.
 
 ### RoadRageQix Game (`RoadRageQix/`)
 
@@ -86,10 +87,15 @@ Arcade territory-claiming game inspired by Qix with Mad Max aesthetic.
 ## Editing Rules
 
 1. Make targeted edits — don't refactor unrelated files.
-2. Preserve the cyberpunk/Mad Max visual aesthetic unless redesign is requested.
+2. Preserve the holographic-foil dark aesthetic on the portfolio (tokens in `:root` of `styles.css`) and the Mad Max aesthetic inside `RoadRageQix/`, unless redesign is requested.
 3. Keep all paths relative and static-host friendly (GitHub Pages compatible).
 4. Never edit `RoadRageQix/node_modules/` or `RoadRageQix/output/`.
-5. When modifying homepage projects, update both the `<nav class="nav">` link and the `#projects .projects-grid` card in `index.html`.
+5. When modifying homepage projects, update the `#projects .projects-grid` card in `index.html` (a `.holo-scene[data-reveal] > a.holo-card` block). The nav lists sections only, not projects.
+
+## Development History (Portfolio)
+
+### 2026-10-11
+- Holographic foil re-theme: replaced the cyberpunk neon shell (cyan/magenta, pixel fonts, cursor trail, floating pixels, glitch hero, particle network) with the Forever Components holographic-foil card look. Removed `math-game.html`, `recipe-finder.html`, `sp500-dashboard.html`, `weather-dashboard.html`. Added WarSim and Blox Skylines cards. Nav reduced to section anchors.
 
 ## Development History (RoadRageQix)
 

@@ -6,20 +6,8 @@
     <title>Richard Yuen - Personal Website</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Floating Pixel Decorations -->
-    <div class="pixel-float pixel-1"></div>
-    <div class="pixel-float pixel-2"></div>
-    <div class="pixel-float pixel-3"></div>
-    <div class="pixel-float pixel-4"></div>
-
-    <!-- Cursor Trail -->
-    <canvas id="cursor-trail"></canvas>
-
     <!-- Navigation -->
     <nav class="nav">
         <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
@@ -31,92 +19,116 @@
         <a href="#projects" class="nav-link">Projects</a>
         <a href="#skills" class="nav-link">Skills</a>
         <a href="#bio" class="nav-link">Bio</a>
-        <a href="math-game.html" class="nav-link">Math Game</a>
-        <a href="RoadRageQix/" class="nav-link">Road Rage Qix</a>
-        <a href="text-scroller.html" class="nav-link">Text Scroller</a>
-        <a href="MOVBattle/" class="nav-link">MOVBattle</a>
     </nav>
 
     <!-- Hero Section -->
     <section id="home" class="hero">
-        <canvas id="hero-particles"></canvas>
-        <div class="hero-content">
-            <div class="hero-text">
-                <h1 class="hero-title" id="hero-title">
-                    <span class="gradient-text">Hello, I'm</span><br>
-                    <span class="gradient-text glitch" data-text="Richard Yuen">Richard Yuen</span>
-                </h1>
-                <p class="hero-subtitle">Investor • Developer • Builder</p>
-                <p class="hero-description">MBA and technologist bridging finance and code</p>
+        <div class="holo-scene hero-scene">
+            <div class="holo-card hero-card" data-tilt="10">
+                <div class="holo-lines"></div>
+                <div class="holo-content">
+                    <p class="holo-subtitle">Hello, I'm</p>
+                    <h1 class="hero-title">Richard Yuen</h1>
+                    <p class="hero-subtitle">Investor &bull; Developer &bull; Builder</p>
+                    <p class="hero-description">MBA and technologist bridging finance and code</p>
+                </div>
             </div>
         </div>
     </section>
 
     <!-- Projects Section -->
     <section id="projects" class="projects">
-        <h2 class="section-title gradient-text" data-reveal>Featured Projects</h2>
+        <h2 class="section-title" data-reveal>Featured Projects</h2>
         <div class="projects-grid">
-            <div class="project-card" data-reveal>
-                <div class="project-gradient-border"></div>
-                <div class="project-content">
-                    <h3 class="project-title">5th Grade Math Challenge 🎮</h3>
-                    <p class="project-description">An interactive math game designed for 5th graders featuring fractions, geometry, and word problems. Track your score and build your streak as you master essential math skills!</p>
-                    <div class="project-tags">
-                        <span class="tag">JavaScript</span>
-                        <span class="tag">HTML5</span>
-                        <span class="tag">CSS3</span>
+            <div class="holo-scene" data-reveal>
+                <a class="holo-card" href="RoadRageQix/">
+                    <div class="holo-lines"></div>
+                    <div class="holo-content">
+                        <h3 class="holo-title">Road Rage: Wasteland Claim</h3>
+                        <p class="holo-subtitle">Arcade</p>
+                        <p class="holo-description">An arcade territory-claiming game inspired by Qix. Carve out the wasteland by drawing trails through open ground and reconnecting to walls while dodging the inferno spike-ball.</p>
+                        <div class="holo-tags">
+                            <span class="tag">JavaScript</span>
+                            <span class="tag">HTML5 Canvas</span>
+                            <span class="tag">Touch Controls</span>
+                        </div>
+                        <span class="holo-cta">Play &rarr;</span>
                     </div>
-                    <a href="math-game.html" class="project-link">Play Game →</a>
-                </div>
+                </a>
             </div>
 
-            <div class="project-card" data-reveal>
-                <div class="project-gradient-border"></div>
-                <div class="project-content">
-                    <h3 class="project-title">Road Rage: Wasteland Claim 🚗</h3>
-                    <p class="project-description">An arcade territory-claiming game inspired by Qix. Carve out the wasteland by drawing trails through open ground and reconnecting to walls while dodging the inferno spike-ball.</p>
-                    <div class="project-tags">
-                        <span class="tag">JavaScript</span>
-                        <span class="tag">HTML5 Canvas</span>
-                        <span class="tag">Touch Controls</span>
+            <div class="holo-scene" data-reveal>
+                <a class="holo-card" href="text-scroller.html">
+                    <div class="holo-lines"></div>
+                    <div class="holo-content">
+                        <h3 class="holo-title">Text Scroller</h3>
+                        <p class="holo-subtitle">Toy</p>
+                        <p class="holo-description">Type any message and watch it scroll across the screen in large glowing letters. Customize speed and color for a retro marquee effect.</p>
+                        <div class="holo-tags">
+                            <span class="tag">JavaScript</span>
+                            <span class="tag">CSS Animation</span>
+                        </div>
+                        <span class="holo-cta">Try it &rarr;</span>
                     </div>
-                    <a href="RoadRageQix/" class="project-link">Play Game →</a>
-                </div>
+                </a>
             </div>
 
-            <div class="project-card" data-reveal>
-                <div class="project-gradient-border"></div>
-                <div class="project-content">
-                    <h3 class="project-title">Text Scroller</h3>
-                    <p class="project-description">Type any message and watch it scroll across the screen in large glowing letters. Customize speed and color for a cyberpunk marquee effect.</p>
-                    <div class="project-tags">
-                        <span class="tag">JavaScript</span>
-                        <span class="tag">CSS Animation</span>
+            <div class="holo-scene" data-reveal>
+                <a class="holo-card" href="MOVBattle/">
+                    <div class="holo-lines"></div>
+                    <div class="holo-content">
+                        <h3 class="holo-title">MOVBattle</h3>
+                        <p class="holo-subtitle">Physics sim</p>
+                        <p class="holo-description">A physics-based battle simulator where you place and customize wobbly ragdoll units on a battlefield, then watch them clash in hilarious, unpredictable combat. Strategize your army composition and placement to dominate the field.</p>
+                        <div class="holo-tags">
+                            <span class="tag">JavaScript</span>
+                            <span class="tag">HTML5</span>
+                            <span class="tag">CSS3</span>
+                        </div>
+                        <span class="holo-cta">Play &rarr;</span>
                     </div>
-                    <a href="text-scroller.html" class="project-link">Try It →</a>
-                </div>
+                </a>
             </div>
 
-            <div class="project-card" data-reveal>
-                <div class="project-gradient-border"></div>
-                <div class="project-content">
-                    <h3 class="project-title">MOVBattle ⚔️</h3>
-                    <p class="project-description">A physics-based battle simulator where you place and customize wobbly ragdoll units on a battlefield, then watch them clash in hilarious, unpredictable combat. Strategize your army composition and placement to dominate the field.</p>
-                    <div class="project-tags">
-                        <span class="tag">JavaScript</span>
-                        <span class="tag">HTML5</span>
-                        <span class="tag">CSS3</span>
+            <div class="holo-scene" data-reveal>
+                <a class="holo-card" href="WarSim/">
+                    <div class="holo-lines"></div>
+                    <div class="holo-content">
+                        <h3 class="holo-title">WarSim</h3>
+                        <p class="holo-subtitle">Grand strategy</p>
+                        <p class="holo-description">Browser-based grand-strategy simulator of a world war starting from 1938. Zoom from theatres down to fleets, fight at sea along real sea lanes, field armour and aircraft, and watch AI nations reach for the bomb.</p>
+                        <div class="holo-tags">
+                            <span class="tag">TypeScript</span>
+                            <span class="tag">Web Workers</span>
+                            <span class="tag">Strategy</span>
+                        </div>
+                        <span class="holo-cta">Play &rarr;</span>
                     </div>
-                    <a href="MOVBattle/" class="project-link">Play Game →</a>
-                </div>
+                </a>
             </div>
 
+            <div class="holo-scene" data-reveal>
+                <a class="holo-card" href="Cities/">
+                    <div class="holo-lines"></div>
+                    <div class="holo-content">
+                        <h3 class="holo-title">Blox Skylines</h3>
+                        <p class="holo-subtitle">City builder</p>
+                        <p class="holo-description">A glossy plastic-brick city builder in Three.js. Seeded, deterministic cities with zoning, roads, traffic and transit, civic buildings, and disasters up to and including a kaiju.</p>
+                        <div class="holo-tags">
+                            <span class="tag">Three.js</span>
+                            <span class="tag">WebGL</span>
+                            <span class="tag">Simulation</span>
+                        </div>
+                        <span class="holo-cta">Build &rarr;</span>
+                    </div>
+                </a>
+            </div>
         </div>
     </section>
 
     <!-- Skills Section -->
     <section id="skills" class="skills">
-        <h2 class="section-title gradient-text" data-reveal>Tech & Tools</h2>
+        <h2 class="section-title" data-reveal>Tech & Tools</h2>
         <div class="skills-grid">
             <div class="skill-card" data-reveal>
                 <span class="skill-icon">JS</span>
@@ -135,11 +147,11 @@
                 <span class="skill-name">Databases</span>
             </div>
             <div class="skill-card" data-reveal>
-                <span class="skill-icon">&#127918;</span>
+                <span class="skill-icon">GD</span>
                 <span class="skill-name">Game Dev</span>
             </div>
             <div class="skill-card" data-reveal>
-                <span class="skill-icon">&#128200;</span>
+                <span class="skill-icon">FIN</span>
                 <span class="skill-name">Finance</span>
             </div>
         </div>
@@ -147,16 +159,16 @@
 
     <!-- Bio Section -->
     <section id="bio" class="bio">
-        <h2 class="section-title gradient-text" data-reveal>About Me</h2>
+        <h2 class="section-title" data-reveal>About Me</h2>
         <div class="bio-content">
             <p class="bio-text drop-cap" data-reveal>
                 <span class="first-letter">I</span>'m an MBA with over <span id="years-experience"></span> years of investment experience. My career has spanned equity research, portfolio management, and market analysis across global financial markets.
             </p>
-            <div class="gradient-divider" data-reveal></div>
+            <div class="divider" data-reveal></div>
             <p class="bio-text" data-reveal>
                 Outside of finance, I've developed a passion for building software from scratch. I enjoy applying the same analytical and quantitative thinking from investing to writing code — whether it's game mechanics, data visualizations, or interactive web apps.
             </p>
-            <div class="gradient-divider" data-reveal></div>
+            <div class="divider" data-reveal></div>
             <p class="bio-text" data-reveal>
                 The projects on this site are things I've built for fun and learning, combining creativity with problem-solving. I'm always looking for new ideas to prototype and bring to life.
             </p>
@@ -164,11 +176,11 @@
     </section>
 
     <!-- Back to Top Button -->
-    <button class="back-to-top" id="backToTop" aria-label="Back to top">↑</button>
+    <button class="back-to-top" id="backToTop" aria-label="Back to top">&uarr;</button>
 
     <!-- Footer -->
     <footer class="footer">
-        <p class="footer-text">© 2026 Richard Yuen. Built with <span class="gradient-text">passion</span> and <span class="gradient-text">code</span>.</p>
+        <p class="footer-text">&copy; 2026 Richard Yuen. Built with passion and code.</p>
     </footer>
 
     <script src="script.js"></script>
