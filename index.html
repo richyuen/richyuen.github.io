@@ -8,6 +8,15 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Aurora background + cursor trail (decorative) -->
+    <div class="aurora" aria-hidden="true">
+        <div class="aurora-ribbon aurora-ribbon--1"></div>
+        <div class="aurora-ribbon aurora-ribbon--2"></div>
+        <div class="aurora-ribbon aurora-ribbon--3"></div>
+        <div class="aurora-veil"></div>
+    </div>
+    <canvas class="cursor-trail" id="cursorTrail" aria-hidden="true"></canvas>
+
     <!-- Navigation -->
     <nav class="nav">
         <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
@@ -23,16 +32,10 @@
 
     <!-- Hero Section -->
     <section id="home" class="hero">
-        <div class="holo-scene hero-scene">
-            <div class="holo-card hero-card" data-tilt="10">
-                <div class="holo-lines"></div>
-                <div class="holo-content">
-                    <p class="holo-subtitle">Hello, I'm</p>
-                    <h1 class="hero-title">Richard Yuen</h1>
-                    <p class="hero-subtitle">Investor &bull; Developer &bull; Builder</p>
-                    <p class="hero-description">MBA and technologist bridging finance and code</p>
-                </div>
-            </div>
+        <div class="hero-inner">
+            <h1 class="hero-name" id="heroName">Richard Yuen</h1>
+            <div class="flap-board" id="flapBoard" aria-hidden="true"></div>
+            <p class="hero-description">MBA and technologist bridging finance and code</p>
         </div>
     </section>
 
@@ -91,10 +94,10 @@
             </div>
 
             <div class="holo-scene" data-reveal>
-                <a class="holo-card" href="WarSim/">
+                <a class="holo-card" href="Warism/">
                     <div class="holo-lines"></div>
                     <div class="holo-content">
-                        <h3 class="holo-title">WarSim</h3>
+                        <h3 class="holo-title">Warism</h3>
                         <p class="holo-subtitle">Grand strategy</p>
                         <p class="holo-description">Browser-based grand-strategy simulator of a world war starting from 1938. Zoom from theatres down to fleets, fight at sea along real sea lanes, field armour and aircraft, and watch AI nations reach for the bomb.</p>
                         <div class="holo-tags">
@@ -174,6 +177,20 @@
             </p>
         </div>
     </section>
+
+    <!-- Project speed dial (keep in sync with the project cards above) -->
+    <div class="speed-dial" id="speedDial">
+        <ul class="speed-dial-actions" id="speedDialActions">
+            <li style="--i: 0"><a class="speed-dial-item" href="RoadRageQix/"><span class="speed-dial-label">Road Rage: Wasteland Claim</span><span class="speed-dial-mini" aria-hidden="true">RR</span></a></li>
+            <li style="--i: 1"><a class="speed-dial-item" href="text-scroller.html"><span class="speed-dial-label">Text Scroller</span><span class="speed-dial-mini" aria-hidden="true">TS</span></a></li>
+            <li style="--i: 2"><a class="speed-dial-item" href="MOVBattle/"><span class="speed-dial-label">MOVBattle</span><span class="speed-dial-mini" aria-hidden="true">MB</span></a></li>
+            <li style="--i: 3"><a class="speed-dial-item" href="Warism/"><span class="speed-dial-label">Warism</span><span class="speed-dial-mini" aria-hidden="true">WA</span></a></li>
+            <li style="--i: 4"><a class="speed-dial-item" href="Cities/"><span class="speed-dial-label">Blox Skylines</span><span class="speed-dial-mini" aria-hidden="true">BS</span></a></li>
+        </ul>
+        <button class="speed-dial-fab" id="speedDialFab" aria-label="Projects" aria-expanded="false" aria-controls="speedDialActions">
+            <span class="speed-dial-icon" aria-hidden="true"></span>
+        </button>
+    </div>
 
     <!-- Back to Top Button -->
     <button class="back-to-top" id="backToTop" aria-label="Back to top">&uarr;</button>

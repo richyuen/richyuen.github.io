@@ -50,6 +50,86 @@ body {
 }
 
 /* ============================================
+   AURORA BACKGROUND
+   Three blurred, screen-blended ribbons drifting over near-black.
+   ============================================ */
+.aurora {
+    --aurora-a: #f4a7b9; /* blush */
+    --aurora-b: #f3e3c3; /* cream */
+    --aurora-c: #d9587a; /* rose */
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--bg);
+}
+
+.aurora-ribbon {
+    position: absolute;
+    left: -25%;
+    width: 150%;
+    height: 34vh;
+    border-radius: 50%;
+    filter: blur(34px);
+    mix-blend-mode: screen;
+    will-change: transform;
+    animation: aurora-drift 9s ease-in-out infinite alternate;
+}
+
+.aurora-ribbon--1 {
+    top: 2vh;
+    opacity: 0.85;
+    background: linear-gradient(90deg, transparent 10%, var(--aurora-a) 40%, transparent 85%);
+}
+
+.aurora-ribbon--2 {
+    top: 18vh;
+    opacity: 0.7;
+    background: linear-gradient(90deg, transparent 5%, var(--aurora-b) 55%, transparent 90%);
+    animation-duration: 11s;
+    animation-delay: -4s;
+    animation-direction: alternate-reverse;
+}
+
+.aurora-ribbon--3 {
+    top: 34vh;
+    opacity: 0.55;
+    background: linear-gradient(90deg, transparent 15%, var(--aurora-c) 45%, transparent 95%);
+    animation-duration: 13s;
+    animation-delay: -7s;
+}
+
+@keyframes aurora-drift {
+    0%   { transform: translateX(-8%) skewY(-6deg) scaleY(0.8); }
+    50%  { transform: translateX(4%) skewY(3deg) scaleY(1.15); }
+    100% { transform: translateX(10%) skewY(-2deg) scaleY(0.9); }
+}
+
+/* Darkens the lower viewport so body text stays readable */
+.aurora-veil {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(10, 10, 12, 0) 40%, rgba(10, 10, 12, 0.85) 100%);
+}
+
+.aurora.paused .aurora-ribbon {
+    animation-play-state: paused;
+}
+
+/* ============================================
+   CURSOR TRAIL
+   ============================================ */
+.cursor-trail {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 999;
+    pointer-events: none;
+}
+
+/* ============================================
    NAVIGATION
    ============================================ */
 .nav {
@@ -131,7 +211,7 @@ body {
 
 /* ============================================
    HOLOGRAPHIC FOIL CARD
-   Shared by the hero name card and project cards.
+   Shared by the project cards.
    .holo-scene supplies perspective (and carries data-reveal);
    .holo-card is the element the tilt JS transforms.
    ============================================ */
@@ -265,10 +345,6 @@ body {
 .holo-card:focus-visible .holo-description,
 .holo-card:hover .holo-subtitle,
 .holo-card:focus-visible .holo-subtitle,
-.holo-card:hover .hero-subtitle,
-.holo-card:focus-visible .hero-subtitle,
-.holo-card:hover .hero-description,
-.holo-card:focus-visible .hero-description,
 .holo-card:hover .tag,
 .holo-card:focus-visible .tag {
     color: var(--ink);
@@ -312,41 +388,31 @@ body {
     padding: 120px 40px 80px;
 }
 
-.hero-scene {
+.hero-inner {
     width: 100%;
-    max-width: 680px;
-}
-
-.hero-card .holo-content {
-    padding: 56px 48px;
-    text-align: center;
+    max-width: 760px;
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    min-height: 360px;
+    gap: 28px;
+    text-align: center;
 }
 
-.hero-card .holo-subtitle {
-    margin-bottom: 0;
-}
-
-.hero-title {
+/* Plain-text name: shown if JS is off, hidden (but still read aloud) once the board runs */
+.hero-name {
     font: 800 clamp(2.2rem, 5vw, 3.6rem)/1.05 var(--font);
     text-transform: uppercase;
     letter-spacing: 4px;
-    white-space: nowrap;
     color: var(--ink);
-    text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
-    margin: 8px 0 16px;
 }
 
-.hero-subtitle {
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    color: var(--slate);
-    margin-bottom: 12px;
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
-    transition: color 0.3s var(--ease);
+.hero-name.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 
 .hero-description {
@@ -354,7 +420,93 @@ body {
     color: var(--slate);
     max-width: 460px;
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
-    transition: color 0.3s var(--ease);
+}
+
+/* ============================================
+   SPLIT-FLAP BOARD (hero)
+   Amber letters on charcoal tiles. Each letter change drops the
+   old top half down (rotateX) and swings the new bottom half in.
+   ============================================ */
+.flap-board {
+    --flap-ink: #f4c430;
+    --flap-tile: #1b1b1f;
+    --flap-tile-2: #141417;
+    width: 100%;
+    container-type: inline-size;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: clamp(3px, 0.7vw, 6px);
+    padding: clamp(10px, 2.4vw, 20px);
+    border-radius: 14px;
+    background: #0d0d10;
+    box-shadow: var(--shadow), inset 0 2px 10px rgba(0, 0, 0, 0.7);
+}
+
+.flap-board:empty {
+    display: none;
+}
+
+.flap {
+    position: relative;
+    aspect-ratio: 3 / 4.2;
+    perspective: 400px;
+    font: 800 6.4cqi/1 var(--font);
+    color: var(--flap-ink);
+    text-shadow: 0 0 12px rgba(244, 196, 48, 0.35);
+}
+
+.flap-half {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 50%;
+    overflow: hidden;
+    background: var(--flap-tile);
+    backface-visibility: hidden;
+}
+
+.flap-half.top {
+    top: 0;
+    border-radius: 5px 5px 0 0;
+    transform-origin: 50% 100%;
+    background: linear-gradient(180deg, #232328, var(--flap-tile));
+}
+
+.flap-half.bottom {
+    bottom: 0;
+    border-radius: 0 0 5px 5px;
+    transform-origin: 50% 0;
+    background: linear-gradient(180deg, var(--flap-tile-2), var(--flap-tile));
+}
+
+/* Glyph box is the full tile height; each half shows its slice */
+.flap-half span {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 200%;
+    display: grid;
+    place-items: center;
+}
+
+.flap-half.bottom span {
+    top: -100%;
+}
+
+.flap-half.fold {
+    z-index: 2;
+}
+
+/* Hinge line */
+.flap::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(50% - 1px);
+    height: 2px;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 3;
 }
 
 /* ============================================
@@ -541,6 +693,178 @@ body {
 }
 
 /* ============================================
+   PROJECT SPEED DIAL
+   Pink FAB rotates + to x and fans the project links up a
+   springy arc (overshoot easing, staggered per item via --i).
+   ============================================ */
+.speed-dial {
+    --fab: #fb7185;
+    --fab-size: 56px;
+    --mini-size: 40px;
+    --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: fixed;
+    right: 40px;
+    bottom: 40px;
+    z-index: 1001;
+}
+
+/* Back-to-top sits above the FAB and steps aside while the dial is open */
+.back-to-top {
+    bottom: calc(40px + 56px + 16px);
+    right: 43px;
+}
+
+.speed-dial.open ~ .back-to-top {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.speed-dial-fab {
+    position: relative;
+    width: var(--fab-size);
+    height: var(--fab-size);
+    border: none;
+    border-radius: 50%;
+    background: var(--fab);
+    color: var(--bg);
+    cursor: pointer;
+    box-shadow: 0 10px 30px -8px rgba(251, 113, 133, 0.6), 0 4px 12px rgba(0, 0, 0, 0.5);
+    transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.speed-dial-fab:hover {
+    transform: scale(1.06);
+    box-shadow: 0 14px 34px -8px rgba(251, 113, 133, 0.75), 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.speed-dial-fab:active {
+    transform: scale(0.94);
+}
+
+/* Plus sign; rotating 135deg turns it into an x */
+.speed-dial-icon,
+.speed-dial-icon::before {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 22px;
+    height: 3px;
+    border-radius: 2px;
+    background: currentColor;
+}
+
+.speed-dial-icon {
+    transition: transform 0.45s var(--spring);
+}
+
+.speed-dial-icon::before {
+    content: '';
+    transform: rotate(90deg);
+}
+
+.speed-dial.open .speed-dial-icon {
+    transform: rotate(135deg);
+}
+
+.speed-dial-actions {
+    position: absolute;
+    right: calc((var(--fab-size) - var(--mini-size)) / 2);
+    bottom: calc(var(--fab-size) + 14px);
+    list-style: none;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: 12px;
+    pointer-events: none;
+}
+
+.speed-dial-actions li {
+    /* Gentle arc: each step up bows further left, then back */
+    --x: calc(sin(var(--i) * 0.6rad) * -22px);
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(0, 24px) scale(0.4);
+    transform-origin: right center;
+    transition:
+        transform 0.3s var(--ease),
+        opacity 0.2s var(--ease),
+        visibility 0s linear 0.3s;
+}
+
+.speed-dial.open .speed-dial-actions {
+    pointer-events: auto;
+}
+
+.speed-dial.open .speed-dial-actions li {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(var(--x), 0) scale(1);
+    transition:
+        transform 0.5s var(--spring) calc(var(--i) * 45ms),
+        opacity 0.25s var(--ease) calc(var(--i) * 45ms),
+        visibility 0s;
+}
+
+.speed-dial-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    color: var(--ink);
+}
+
+.speed-dial-label {
+    font: 600 12px/1 var(--font);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    padding: 9px 14px;
+    border-radius: 50px;
+    background: rgba(26, 26, 36, 0.85);
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 0 0 1px var(--line);
+    transition: box-shadow 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.speed-dial-mini {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: var(--mini-size);
+    height: var(--mini-size);
+    border-radius: 50%;
+    background: var(--card);
+    box-shadow: var(--shadow);
+    font: 700 11px/1 var(--font);
+    letter-spacing: 0.5px;
+    color: var(--fab);
+    transition: background 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.speed-dial-item:hover .speed-dial-label,
+.speed-dial-item:focus-visible .speed-dial-label {
+    box-shadow: inset 0 0 0 1px var(--fab);
+}
+
+.speed-dial-item:hover .speed-dial-mini,
+.speed-dial-item:focus-visible .speed-dial-mini {
+    background: var(--fab);
+    color: var(--bg);
+}
+
+@media (max-width: 640px) {
+    .speed-dial {
+        right: 20px;
+        bottom: 20px;
+    }
+
+    .back-to-top {
+        bottom: calc(20px + 56px + 16px);
+        right: 23px;
+    }
+}
+
+/* ============================================
    FOOTER
    ============================================ */
 .footer {
@@ -607,6 +931,20 @@ body {
     .nav.open .nav-link {
         animation: none;
     }
+
+    .aurora-ribbon {
+        animation: none;
+    }
+
+    .cursor-trail {
+        display: none;
+    }
+
+    .speed-dial-icon,
+    .speed-dial-actions li,
+    .speed-dial.open .speed-dial-actions li {
+        transition: none;
+    }
 }
 
 /* ============================================
@@ -665,13 +1003,7 @@ body {
         padding: 24px;
     }
 
-    .hero-card .holo-content {
-        padding: 40px 24px;
-        min-height: 0;
-    }
-
-    .hero-title {
-        white-space: normal;
+    .hero-name {
         letter-spacing: 2px;
     }
 
